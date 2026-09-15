@@ -1,0 +1,20 @@
+# Model artifact sources. See docs/ARCHITECTURE.md Section "Alternatives
+# considered" for why each fallback path was taken where the ideal source
+# was unavailable in this environment.
+
+forgery_classifier:
+  source: "timm_fallback"   # no suitable pretrained SIDTD/MIDV-2020 forgery-classifier checkpoint was found on Hugging Face at build time (see docs/ARCHITECTURE.md); using the spec's own documented fallback path instead
+  backbone: "efficientnet_b3"
+  pretrained: "imagenet"
+  fine_tuned_head_path: "training/artifacts/forgery_head_v1.pt"
+  expected_sha256: null   # filled in after first successful training run
+
+fusion_model:
+  path: "training/artifacts/xgboost_fusion_v1.json"
+  feature_manifest_path: "training/artifacts/feature_manifest_v1.json"
+  expected_sha256: null   # filled in after first successful training run
+
+face_embedding:
+  backend: "deepface"
+  model_name: "ArcFace"
+  detector_backend: "retinaface"

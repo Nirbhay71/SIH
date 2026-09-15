@@ -1,0 +1,33 @@
+# Every threshold here must trace to a written justification in
+# docs/THRESHOLD_JUSTIFICATIONS.md (Section 4A of the build spec). Values
+# marked "ILLUSTRATIVE" have not been calibrated against real labeled data
+# (see docs/THRESHOLD_JUSTIFICATIONS.md for exactly which ones and why) and
+# must not be read as validated production values.
+
+preprocessing:
+  blur_variance_min: 100.0          # ILLUSTRATIVE — ends of a manual blurry/sharp sample sweep, see justifications doc
+  glare_pixel_fraction_max: 0.15    # ILLUSTRATIVE
+
+ocr:
+  field_confidence_min: 0.85
+
+tampering:
+  ela_zscore_threshold: 2.0             # ILLUSTRATIVE
+  font_spacing_cv_max: 0.4              # ILLUSTRATIVE
+  baseline_deviation_px_max: 3.0        # ILLUSTRATIVE, scaled to a 300 DPI reference scan
+  height_zscore_max: 2.0                # ILLUSTRATIVE
+  forgery_classifier_threshold: 0.4     # recall-biased per Section 7.5; calibrated on the synthetic placeholder split, see justifications doc
+
+face:
+  match_distance_threshold: 0.58    # recalibrated per Section 8.3 on synthetic placeholder pairs — see justifications doc; do NOT revert to the ArcFace library default (~0.68)
+  borderline_margin: 0.05
+  liveness_score_min: 0.5
+
+fusion:
+  risk_tier_low_max: 30
+  risk_tier_medium_max: 60
+  risk_tier_high_max: 80
+
+security:
+  max_upload_size_mb: 15
+  max_image_dimension_px: 6000

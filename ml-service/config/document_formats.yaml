@@ -1,0 +1,63 @@
+# Per-document-type format rules (Section 1B / 4A of the build spec).
+# Scope: SSB border-checkpoint documents only. Domestic Indian IDs (Aadhaar,
+# PAN, Voter ID) are explicitly out of scope (Section 1B) and must never be
+# added here.
+
+indian_passport:
+  has_mrz: true
+  mrz_lines: 2
+  mrz_document_code_prefix: "P<IND"
+  document_number_pattern: "^[A-Z][0-9]{7}$"
+  fields: [name, surname, given_names, passport_number, nationality, date_of_birth, sex, expiry_date]
+
+foreign_passport:
+  has_mrz: true
+  mrz_lines: 2
+  mrz_document_code_prefix: null   # country-dependent; validated structurally only (length/charset), never hardcoded per-country
+  document_number_pattern: null    # country-dependent; do not force a single regex across issuing states
+  fields: [name, surname, given_names, passport_number, nationality, date_of_birth, sex, expiry_date]
+
+indian_visa_sticker:
+  has_mrz: true
+  mrz_lines: 2
+  document_number_pattern: "^[A-Z0-9]{8,10}$"
+  fields: [visa_number, visa_type, entry_validity, stay_duration]
+  note: "Sticker/stamp visa has its own MRZ distinct from the passport's MRZ."
+
+indian_evisa:
+  has_mrz: false
+  document_number_pattern: "^[A-Z0-9]{8,12}$"
+  fields: [visa_number, visa_type, entry_validity, stay_duration, applicant_name, passport_number_reference]
+  note: "e-Visa printout typically has no MRZ; free-text extraction only."
+
+oci_card:
+  has_mrz: false
+  document_number_pattern: "^[A-Z0-9]{10,15}$"
+  fields: [name, date_of_birth, card_number, issuing_post]
+
+border_permit_ilp:
+  has_mrz: false
+  document_number_pattern: null   # region-dependent, see Section 1B; unmatched formats are low-confidence, not invalid
+  fields: [holder_name, permit_number, valid_from, valid_to, authorized_region]
+  regional_rules:
+    default:
+      permit_number_pattern: null
+      confidence_penalty_if_unmatched: 0.2
+
+border_permit_pap:
+  has_mrz: false
+  document_number_pattern: null
+  fields: [holder_name, permit_number, valid_from, valid_to, authorized_region]
+  regional_rules:
+    default:
+      permit_number_pattern: null
+      confidence_penalty_if_unmatched: 0.2
+
+border_permit_rap:
+  has_mrz: false
+  document_number_pattern: null
+  fields: [holder_name, permit_number, valid_from, valid_to, authorized_region]
+  regional_rules:
+    default:
+      permit_number_pattern: null
+      confidence_penalty_if_unmatched: 0.2
