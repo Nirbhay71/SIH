@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { startVerification } from "../lib/api";
-import FlowProgress from "../components/FlowProgress.jsx";
+import VerifyShell from "../components/VerifyShell.jsx";
 
 export default function Setup() {
   const navigate = useNavigate();
@@ -46,27 +46,25 @@ export default function Setup() {
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto" }}>
-      <FlowProgress current="setup" />
-      <div className="card">
-        <h2>Checkpoint Setup</h2>
+    <VerifyShell current="setup" status={locStatus}>
+      <h2>Checkpoint Setup</h2>
+      <p className="subtitle">Confirm your travel direction so we can start your verification session.</p>
 
-        <label>Travel Direction</label>
-        <select value={direction} onChange={(e) => setDirection(e.target.value)}>
-          <option value="entering_india">Entering India</option>
-          <option value="entering_nepal">Entering Nepal</option>
-        </select>
+      <label>Travel Direction</label>
+      <select value={direction} onChange={(e) => setDirection(e.target.value)}>
+        <option value="entering_india">Entering India</option>
+        <option value="entering_nepal">Entering Nepal</option>
+      </select>
 
-        <div className="status-pill">📍 {locStatus}</div>
+      <div className="status-pill">📍 {locStatus}</div>
 
-        {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+      {error && <p className="verify-error">{error}</p>}
 
-        <div className="action-row">
-          <button className="btn btn-primary btn-block" disabled={!coords || starting} onClick={handleContinue}>
-            {starting ? "Starting..." : "Continue to Document Capture"}
-          </button>
-        </div>
+      <div className="action-row">
+        <button className="btn btn-primary btn-block verify-cta" disabled={!coords || starting} onClick={handleContinue}>
+          {starting ? "Starting..." : "Continue to Document Capture"}
+        </button>
       </div>
-    </div>
+    </VerifyShell>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CameraCapture from "../components/CameraCapture.jsx";
-import FlowProgress from "../components/FlowProgress.jsx";
+import VerifyShell from "../components/VerifyShell.jsx";
 import { Spinner } from "../components/Loader.jsx";
 import { uploadDocument } from "../lib/api";
 
@@ -107,10 +107,10 @@ export default function Capture() {
     }
   }
 
+  const status = uploading ? "Uploading your document…" : preview ? "Document ready — run verification when you're set." : "Upload a document image, or use your camera.";
+
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto" }}>
-      <FlowProgress current="capture" />
-      <div className="card">
+    <VerifyShell current="capture" status={status}>
       <h2>Document Capture</h2>
       <p className="subtitle">Upload a document image, or use your camera.</p>
 
@@ -186,15 +186,14 @@ export default function Capture() {
         </button>
       </div>
 
-      {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+      {error && <p className="verify-error">{error}</p>}
 
       <div className="action-row">
-        <button className="btn btn-primary btn-block" disabled={!file || uploading} onClick={submit}>
+        <button className="btn btn-primary btn-block verify-cta" disabled={!file || uploading} onClick={submit}>
           {uploading && <Spinner size={14} inline />}
           {uploading ? "Uploading..." : "Run Verification →"}
         </button>
       </div>
-      </div>
-    </div>
+    </VerifyShell>
   );
 }

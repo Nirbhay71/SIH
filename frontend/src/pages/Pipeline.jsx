@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { openPipelineSocket } from "../lib/api";
-import FlowProgress from "../components/FlowProgress.jsx";
+import VerifyShell from "../components/VerifyShell.jsx";
 import { ThinkingLoader } from "../components/Loader.jsx";
 
 const VISIBLE_STEPS = [
@@ -63,35 +63,35 @@ export default function Pipeline() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
 
+  const activeLabel = VISIBLE_STEPS.find((s) => stepStatus[s.key] === "active")?.label;
+  const status = activeLabel ? `Running ${activeLabel}…` : "Running automated document & identity checks…";
+
   return (
-    <div>
-      <FlowProgress current="pipeline" />
-      <div className="card">
-        <h2>Verification Pipeline</h2>
-        <div className="stepper">
-          {VISIBLE_STEPS.map((step) => {
-            const status = stepStatus[step.key] || "pending";
-            return (
-              <div key={step.key} className={`step ${status}`}>
-                <div className="dot">
-                  {status === "passed" ? "✓" : status === "flagged" ? "!" : ""}
-                </div>
-                <div className="label">{step.label}</div>
+    <VerifyShell current="pipeline" status={status}>
+      <h2>Verification Pipeline</h2>
+      <div className="stepper">
+        {VISIBLE_STEPS.map((step) => {
+          const s = stepStatus[step.key] || "pending";
+          return (
+            <div key={step.key} className={`step ${s}`}>
+              <div className="dot">
+                {s === "passed" ? "✓" : s === "flagged" ? "!" : ""}
               </div>
-            );
-          })}
-        </div>
-
-        {stepStatus.risk_score === "active" && <ThinkingLoader label="Computing final risk score" />}
-
-        <div className="log-panel" ref={logRef}>
-          {logs.map((msg, i) => (
-            <div key={i} className={`log-line ${msg.status === "error" ? "error" : ""}`} style={{ animationDelay: `${i * 0.02}s` }}>
-              [{msg.stage}] {msg.log}
+              <div className="label">{step.label}</div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
-    </div>
+
+      {stepStatus.risk_score === "active" && <ThinkingLoader label="Computing final risk score" />}
+
+      <div className="log-panel" ref={logRef}>
+        {logs.map((msg, i) => (
+          <div key={i} className={`log-line ${msg.status === "error" ? "error" : ""}`} style={{ animationDelay: `${i * 0.02}s` }}>
+            [{msg.stage}] {msg.log}
+          </div>
+        ))}
+      </div>
+    </VerifyShell>
   );
 }

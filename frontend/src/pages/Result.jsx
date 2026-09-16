@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getResult, submitDecision } from "../lib/api";
-import FlowProgress from "../components/FlowProgress.jsx";
+import VerifyShell from "../components/VerifyShell.jsx";
 import { ThinkingLoader, Spinner } from "../components/Loader.jsx";
 
 function riskBadgeClass(level) {
@@ -41,22 +41,29 @@ export default function Result() {
     }
   }
 
-  if (error) return <p style={{ color: "var(--red)" }}>{error}</p>;
-  if (!result) return (
-    <div>
-      <FlowProgress current="result" />
-      <div className="card">
+  if (error) {
+    return (
+      <VerifyShell current="result" status="Something went wrong compiling your result.">
+        <p className="verify-error">{error}</p>
+      </VerifyShell>
+    );
+  }
+  if (!result) {
+    return (
+      <VerifyShell current="result" status="Compiling verification result…">
         <ThinkingLoader label="Compiling verification result" />
-      </div>
-    </div>
-  );
+      </VerifyShell>
+    );
+  }
 
   const fields = result.ocr_raw_json?.fields || {};
   const validation = result.validation_result_json || { passed: true, failures: [] };
+  const status = result.officer_decision
+    ? `Decision recorded: ${result.officer_decision.toUpperCase()}`
+    : `${result.risk_level?.toUpperCase()} risk — awaiting officer decision`;
 
   return (
-    <div>
-      <FlowProgress current="result" />
+    <VerifyShell current="result" status={status}>
       {result.analysis_source === "mock" && (
         <div className="card" style={{ background: "#fffbeb", border: "2px solid var(--yellow)" }}>
           <h2 style={{ color: "var(--yellow)" }}>⚠️ Demo Data — ML Service Unavailable</h2>
@@ -204,6 +211,6 @@ export default function Result() {
         )}
         {result.record_hash && <p className="mini">Audit hash: {result.record_hash}</p>}
       </div>
-    </div>
+    </VerifyShell>
   );
 }

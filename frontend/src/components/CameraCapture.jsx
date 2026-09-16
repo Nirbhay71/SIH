@@ -54,12 +54,12 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
 
   if (circleFrame) {
     return (
-      <div className="faceid-camera">
-        <div className={`faceid-viewport ${active ? "is-active" : ""}`}>
+      <div className="verify-camera">
+        <div className={`verify-viewport ${active ? "is-active" : ""}`}>
           {active ? (
             <video ref={videoRef} autoPlay playsInline />
           ) : (
-            <div className="faceid-viewport-placeholder">
+            <div className="verify-viewport-placeholder">
               <span>🧑</span>
             </div>
           )}
@@ -68,17 +68,17 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
           <span className="corner tr" />
           <span className="corner bl" />
           <span className="corner br" />
-          <div className="faceid-viewport-status">
-            <span className={`faceid-status-dot ${active ? "live" : ""}`} />
+          <div className="verify-viewport-status">
+            <span className={`verify-status-dot ${active ? "live" : ""}`} />
             {active ? "Scanning face" : "Camera ready"}
           </div>
         </div>
 
-        <p className="faceid-viewport-hint">
+        <p className="verify-viewport-hint">
           {active ? "Align your face inside the frame and hold still" : "Position your face in the frame to begin"}
         </p>
 
-        {error && <p className="faceid-error">{error}</p>}
+        {error && <p className="verify-error">{error}</p>}
 
         <div className="action-row" style={{ justifyContent: "center" }}>
           {!active ? (
