@@ -54,28 +54,35 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
 
   if (circleFrame) {
     return (
-      <div>
-        <div className="face-scan-wrap">
-          <div className="face-scan-circle">
-            {active ? (
-              <video ref={videoRef} autoPlay playsInline />
-            ) : (
-              <div className="face-scan-placeholder">🧑</div>
-            )}
-          </div>
+      <div className="faceid-camera">
+        <div className={`faceid-viewport ${active ? "is-active" : ""}`}>
+          {active ? (
+            <video ref={videoRef} autoPlay playsInline />
+          ) : (
+            <div className="faceid-viewport-placeholder">
+              <span>🧑</span>
+            </div>
+          )}
           {active && <span className="scan-line" />}
           <span className="corner tl" />
           <span className="corner tr" />
           <span className="corner bl" />
           <span className="corner br" />
+          <div className="faceid-viewport-status">
+            <span className={`faceid-status-dot ${active ? "live" : ""}`} />
+            {active ? "Scanning face" : "Camera ready"}
+          </div>
         </div>
-        <div className="face-scan-label">{active ? "Scanning..." : "Ready to scan"}</div>
 
-        {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+        <p className="faceid-viewport-hint">
+          {active ? "Align your face inside the frame and hold still" : "Position your face in the frame to begin"}
+        </p>
+
+        {error && <p className="faceid-error">{error}</p>}
 
         <div className="action-row" style={{ justifyContent: "center" }}>
           {!active ? (
-            <button className="btn btn-primary" onClick={start}>
+            <button className="btn btn-primary btn-block" onClick={start}>
               📷 Start Face Scan
             </button>
           ) : (

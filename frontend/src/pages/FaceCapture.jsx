@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CameraCapture from "../components/CameraCapture.jsx";
-import FlowProgress from "../components/FlowProgress.jsx";
 import { ThinkingLoader } from "../components/Loader.jsx";
 import { uploadFace } from "../lib/api";
+
+const STAGES = [
+  { key: "setup", label: "Setup", desc: "Session initialized" },
+  { key: "capture", label: "Document", desc: "Travel document scanned & verified" },
+  { key: "pipeline", label: "Analysis", desc: "OCR, tamper & data checks" },
+  { key: "face", label: "Face", desc: "Matching your live face to the document photo" },
+  { key: "result", label: "Result", desc: "Final explainable risk decision" },
+];
+const CURRENT_STAGE = "face";
 
 export default function FaceCapture() {
   const { sessionId } = useParams();
@@ -27,44 +35,66 @@ export default function FaceCapture() {
     }
   }
 
+  const currentIndex = STAGES.findIndex((s) => s.key === CURRENT_STAGE);
+  const activeStage = STAGES[currentIndex];
+
+  let statusHeadline = "Position your face in the frame and capture";
+  if (uploading) statusHeadline = "Matching your live face with the document identity…";
+  else if (error) statusHeadline = "Face verification failed — please try again";
+  else if (preview) statusHeadline = "Face captured — ready for verification";
+
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <FlowProgress current="face" />
-      <div className="face-id-layout">
-        <div className="card face-id-side">
-          <div className="face-id-brand">🛂 Border Screening</div>
-          <div className="face-id-steps">
-            <div className="face-id-step done">
-              <span className="face-id-step-icon">✓</span>
-              <div>
-                <strong>Document Scan</strong>
-                <p>Verifies your travel document via OCR + tampering checks.</p>
-              </div>
-            </div>
-            <div className="face-id-step active">
-              <span className="face-id-step-icon">🧑</span>
-              <div>
-                <strong>Face ID Verification</strong>
-                <p>Verifies your identity by matching your live face to the document photo.</p>
-              </div>
-            </div>
-            <div className="face-id-step">
-              <span className="face-id-step-icon">📊</span>
-              <div>
-                <strong>Risk Assessment</strong>
-                <p>Combines every module's output into one explainable risk score.</p>
-              </div>
-            </div>
-          </div>
-          <div className="face-id-note">
-            <strong>Your data is protected.</strong>
-            <p>Live capture is only used for this verification session and matched against your uploaded document — never stored for any other purpose.</p>
+    <div className="faceid-screen">
+      <div className="faceid-left">
+        <div className="faceid-brand">
+          <span className="faceid-brand-mark">🛂</span>
+          <div>
+            <strong>Border Screening System</strong>
+            <span>AI-powered identity &amp; document verification</span>
           </div>
         </div>
 
-        <div className="card face-id-main">
+        <h1 className="faceid-left-title">Identity Verification</h1>
+        <p className="faceid-left-sub">
+          Securely verify your identity using document and facial verification.
+        </p>
+
+        <div className="faceid-timeline">
+          {STAGES.map((s, i) => {
+            const state = i < currentIndex ? "done" : i === currentIndex ? "active" : "upcoming";
+            return (
+              <div key={s.key} className={`faceid-tl-item faceid-tl-${state}`}>
+                <div className="faceid-tl-rail">
+                  <span className="faceid-tl-node">
+                    {state === "done" ? "✓" : state === "active" ? <span className="faceid-tl-pulse" /> : ""}
+                  </span>
+                  {i < STAGES.length - 1 && <span className="faceid-tl-line" />}
+                </div>
+                <div className="faceid-tl-body">
+                  <strong>{s.label}</strong>
+                  {state === "active" && <p>{s.desc}</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="faceid-current-card">
+          <span className="faceid-current-label">Currently</span>
+          <strong>{activeStage.label} Verification</strong>
+          <p>{statusHeadline}</p>
+        </div>
+
+        <div className="faceid-note">
+          <strong>Your data is protected.</strong>
+          <p>Live capture is only used for this verification session and matched against your uploaded document — never stored for any other purpose.</p>
+        </div>
+      </div>
+
+      <div className="faceid-right">
+        <div className="faceid-right-inner">
           <h2>Face ID Verification</h2>
-          <p className="subtitle">{uploading ? "Hold still — verifying your face." : "Position your face in the frame and capture."}</p>
+          <p className="subtitle">{statusHeadline}</p>
 
           {uploading ? (
             <ThinkingLoader label="Verifying face match" />
@@ -101,17 +131,19 @@ export default function FaceCapture() {
               )}
 
               {preview && (
-                <div>
-                  <div className="face-scan-wrap">
-                    <div className="face-scan-circle">
-                      <img src={preview} alt="face preview" />
-                    </div>
+                <div className="faceid-camera">
+                  <div className="faceid-viewport is-captured">
+                    <img src={preview} alt="face preview" />
                     <span className="corner tl" />
                     <span className="corner tr" />
                     <span className="corner bl" />
                     <span className="corner br" />
+                    <div className="faceid-viewport-status">
+                      <span className="faceid-status-dot ok" />
+                      Face captured
+                    </div>
                   </div>
-                  <div className="face-scan-label">Captured ✓</div>
+                  <p className="faceid-viewport-hint">Ready for verification</p>
                   <div style={{ textAlign: "center" }}>
                     <button className="btn btn-outline" style={{ marginTop: 10 }} onClick={() => { setPreview(null); setFile(null); }}>
                       Retake
@@ -125,10 +157,10 @@ export default function FaceCapture() {
                 <label htmlFor="mismatch" style={{ margin: 0 }}>Simulate a face mismatch (demo)</label>
               </div>
 
-              {error && <p style={{ color: "var(--red)", textAlign: "center" }}>{error}</p>}
+              {error && <p className="faceid-error" style={{ textAlign: "center" }}>{error}</p>}
 
               <div className="action-row" style={{ justifyContent: "center" }}>
-                <button className="btn btn-primary" style={{ minWidth: 220 }} disabled={!file || uploading} onClick={submit}>
+                <button className="btn btn-primary faceid-verify-btn" disabled={!file || uploading} onClick={submit}>
                   Verify Face →
                 </button>
               </div>
