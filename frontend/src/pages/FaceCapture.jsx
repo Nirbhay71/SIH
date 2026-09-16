@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import CameraCapture from "../components/CameraCapture.jsx";
 import VerifyShell from "../components/VerifyShell.jsx";
 import { ThinkingLoader } from "../components/Loader.jsx";
@@ -8,6 +9,7 @@ import { uploadFace } from "../lib/api";
 export default function FaceCapture() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
   const [simulateMismatch, setSimulateMismatch] = useState(false);
@@ -27,19 +29,19 @@ export default function FaceCapture() {
     }
   }
 
-  let statusHeadline = "Position your face in the frame and capture";
-  if (uploading) statusHeadline = "Matching your live face with the document identity…";
-  else if (error) statusHeadline = "Face verification failed — please try again";
-  else if (preview) statusHeadline = "Face captured — ready for verification";
+  let statusHeadline = t("face.positionFace");
+  if (uploading) statusHeadline = t("face.matching");
+  else if (error) statusHeadline = t("face.failed");
+  else if (preview) statusHeadline = t("face.captured");
 
   return (
     <VerifyShell current="face" status={statusHeadline}>
       <div className="verify-center">
-        <h2>Face ID Verification</h2>
+        <h2>{t("face.title")}</h2>
         <p className="subtitle">{statusHeadline}</p>
 
         {uploading ? (
-          <ThinkingLoader label="Verifying face match" />
+          <ThinkingLoader label={t("face.verifyingMatch")} />
         ) : (
           <>
             {!preview && (
@@ -49,7 +51,7 @@ export default function FaceCapture() {
                   setPreview(dataUrl);
                 }}
                 facingMode="user"
-                label="Capture Face"
+                label={t("face.captureFaceLabel")}
                 circleFrame
               />
             )}
@@ -68,7 +70,7 @@ export default function FaceCapture() {
                     }
                   }}
                 />
-                or click to upload a face photo
+                {t("face.orUpload")}
               </label>
             )}
 
@@ -82,13 +84,13 @@ export default function FaceCapture() {
                   <span className="corner br" />
                   <div className="verify-viewport-status">
                     <span className="verify-status-dot ok" />
-                    Face captured
+                    {t("face.faceCapturedBadge")}
                   </div>
                 </div>
-                <p className="verify-viewport-hint">Ready for verification</p>
+                <p className="verify-viewport-hint">{t("face.readyForVerification")}</p>
                 <div style={{ textAlign: "center" }}>
                   <button className="btn btn-outline" style={{ marginTop: 10 }} onClick={() => { setPreview(null); setFile(null); }}>
-                    Retake
+                    {t("capture.retake")}
                   </button>
                 </div>
               </div>
@@ -96,14 +98,14 @@ export default function FaceCapture() {
 
             <div className="toggle-row" style={{ justifyContent: "center" }}>
               <input type="checkbox" id="mismatch" checked={simulateMismatch} onChange={(e) => setSimulateMismatch(e.target.checked)} />
-              <label htmlFor="mismatch" style={{ margin: 0 }}>Simulate a face mismatch (demo)</label>
+              <label htmlFor="mismatch" style={{ margin: 0 }}>{t("face.simulateMismatch")}</label>
             </div>
 
             {error && <p className="verify-error" style={{ textAlign: "center" }}>{error}</p>}
 
             <div className="action-row" style={{ justifyContent: "center" }}>
               <button className="btn btn-primary verify-cta" disabled={!file || uploading} onClick={submit}>
-                Verify Face →
+                {t("face.verifyFace")}
               </button>
             </div>
           </>

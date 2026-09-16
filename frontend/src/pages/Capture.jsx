@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import CameraCapture from "../components/CameraCapture.jsx";
 import VerifyShell from "../components/VerifyShell.jsx";
 import { Spinner } from "../components/Loader.jsx";
@@ -17,22 +18,22 @@ async function fetchAsFile(url, filename) {
 // system what they're presenting up front, rather than the system trying
 // to guess Voter ID vs. Aadhaar vs. PAN from OCR alone — the pipeline has
 // no real classifier for that distinction.
-const DOCUMENT_TYPES = [
-  { value: "indian_passport", label: "Indian Passport" },
-  { value: "foreign_passport", label: "Foreign Passport" },
-  { value: "voter_id", label: "Voter ID Card (EPIC)" },
-  { value: "emergency_certificate", label: "Emergency Certificate (Embassy)" },
-  { value: "identity_certificate", label: "Identity Certificate (Embassy)" },
-  { value: "school_identity_certificate", label: "School Identity Certificate (ages 15-18)" },
-  { value: "aadhaar", label: "Aadhaar Card" },
-  { value: "pan_card", label: "PAN Card" },
-  { value: "driving_license", label: "Driving Licence" },
-  { value: "ration_card", label: "Ration Card" },
-  { value: "cghs_card", label: "CGHS Card" },
-  { value: "indian_visa_sticker", label: "Visa (Sticker)" },
-  { value: "indian_evisa", label: "e-Visa" },
-  { value: "oci_card", label: "OCI Card" },
-  { value: "border_permit_ilp", label: "Border Permit (ILP)" },
+const DOCUMENT_TYPE_VALUES = [
+  "indian_passport",
+  "foreign_passport",
+  "voter_id",
+  "emergency_certificate",
+  "identity_certificate",
+  "school_identity_certificate",
+  "aadhaar",
+  "pan_card",
+  "driving_license",
+  "ration_card",
+  "cghs_card",
+  "indian_visa_sticker",
+  "indian_evisa",
+  "oci_card",
+  "border_permit_ilp",
 ];
 
 // Mirrors ml-service's preprocessing.min_dimension_px (config/thresholds.yaml)
@@ -47,6 +48,7 @@ const MIN_DOCUMENT_DIMENSION_PX = 400;
 export default function Capture() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
   const [imgDims, setImgDims] = useState(null); // { width, height } | null (null = unknown, e.g. PDF)
@@ -107,17 +109,17 @@ export default function Capture() {
     }
   }
 
-  const status = uploading ? "Uploading your document…" : preview ? "Document ready — run verification when you're set." : "Upload a document image, or use your camera.";
+  const status = uploading ? t("capture.statusUploading") : preview ? t("capture.statusReady") : t("capture.statusIdle");
 
   return (
     <VerifyShell current="capture" status={status}>
-      <h2>Document Capture</h2>
-      <p className="subtitle">Upload a document image, or use your camera.</p>
+      <h2>{t("capture.title")}</h2>
+      <p className="subtitle">{t("capture.subtitle")}</p>
 
-      <label>Document Type</label>
+      <label>{t("capture.documentType")}</label>
       <select value={docType} onChange={(e) => setDocType(e.target.value)} style={{ marginBottom: 16 }}>
-        {DOCUMENT_TYPES.map((t) => (
-          <option key={t.value} value={t.value}>{t.label}</option>
+        {DOCUMENT_TYPE_VALUES.map((value) => (
+          <option key={value} value={value}>{t(`capture.documentTypes.${value}`)}</option>
         ))}
       </select>
 
@@ -132,10 +134,10 @@ export default function Capture() {
             if (!preview) setPendingOpen(true);
           }}
         >
-          Upload File
+          {t("capture.uploadFile")}
         </button>
         <button className={`btn ${mode === "camera" ? "btn-primary" : "btn-outline"}`} onClick={() => setMode("camera")}>
-          Use Camera
+          {t("capture.useCamera")}
         </button>
       </div>
 
@@ -148,14 +150,14 @@ export default function Capture() {
             style={{ display: "none" }}
             onChange={(e) => e.target.files[0] && onFileChosen(e.target.files[0])}
           />
-          Click to choose a document image
+          {t("capture.clickToChoose")}
         </label>
       )}
 
       {mode === "camera" && !preview && (
         <CameraCapture
           onCapture={(f, dataUrl) => { setFile(f); setPreview(dataUrl); checkDimensions(dataUrl, f.name); }}
-          label="Capture Document"
+          label={t("capture.captureDocument")}
         />
       )}
 
@@ -164,25 +166,25 @@ export default function Capture() {
           <img className="preview" src={preview} alt="document preview" />
           {imgDims && (
             <p className="mini" style={{ marginTop: 6 }}>
-              Image size: {imgDims.width}×{imgDims.height}px
+              {t("capture.imageSize")}: {imgDims.width}×{imgDims.height}px
               {Math.min(imgDims.width, imgDims.height) < MIN_DOCUMENT_DIMENSION_PX && (
-                <span style={{ color: "var(--red)", fontWeight: 700 }}> — too small, will likely be rejected. Use a higher-resolution photo or scan.</span>
+                <span style={{ color: "var(--red)", fontWeight: 700 }}>{t("capture.tooSmall")}</span>
               )}
             </p>
           )}
           <button className="btn btn-outline" style={{ marginTop: 10 }} onClick={() => { setPreview(null); setFile(null); setImgDims(null); }}>
-            Retake
+            {t("capture.retake")}
           </button>
         </div>
       )}
 
       <div className="sample-buttons">
-        <span className="mini" style={{ width: "100%" }}>Demo shortcuts:</span>
+        <span className="mini" style={{ width: "100%" }}>{t("capture.demoShortcuts")}</span>
         <button className="btn btn-outline" onClick={() => useSample("sample_genuine.png")}>
-          Use Genuine Sample
+          {t("capture.useGenuineSample")}
         </button>
         <button className="btn btn-outline" onClick={() => useSample("sample_tampered_document.png")}>
-          Use Tampered Sample
+          {t("capture.useTamperedSample")}
         </button>
       </div>
 
@@ -191,7 +193,7 @@ export default function Capture() {
       <div className="action-row">
         <button className="btn btn-primary btn-block verify-cta" disabled={!file || uploading} onClick={submit}>
           {uploading && <Spinner size={14} inline />}
-          {uploading ? "Uploading..." : "Run Verification →"}
+          {uploading ? t("capture.uploading") : t("capture.runVerification")}
         </button>
       </div>
     </VerifyShell>

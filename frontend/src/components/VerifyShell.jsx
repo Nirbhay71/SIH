@@ -1,37 +1,32 @@
-const STAGES = [
-  { key: "setup", label: "Setup", desc: "Confirm checkpoint & location" },
-  { key: "capture", label: "Document", desc: "Scan and verify your travel document" },
-  { key: "pipeline", label: "Analysis", desc: "OCR, tampering and data checks running" },
-  { key: "face", label: "Face", desc: "Matching your live face to the document photo" },
-  { key: "result", label: "Result", desc: "Final explainable risk decision" },
-];
+import { useTranslation } from "react-i18next";
+
+const STAGE_KEYS = ["setup", "capture", "pipeline", "face", "result"];
 
 export default function VerifyShell({ current, status, children }) {
-  const currentIndex = STAGES.findIndex((s) => s.key === current);
-  const activeStage = STAGES[currentIndex] || STAGES[0];
+  const { t } = useTranslation();
+  const currentIndex = STAGE_KEYS.indexOf(current);
+  const activeLabel = t(`verifyShell.stages.${STAGE_KEYS[currentIndex] || STAGE_KEYS[0]}.label`);
 
   return (
     <div className="verify-screen">
       <div className="verify-left">
-        <h1 className="verify-left-title">Identity Verification</h1>
-        <p className="verify-left-sub">
-          Securely verify your identity using document and facial verification.
-        </p>
+        <h1 className="verify-left-title">{t("verifyShell.title")}</h1>
+        <p className="verify-left-sub">{t("verifyShell.subtitle")}</p>
 
         <div className="verify-timeline">
-          {STAGES.map((s, i) => {
+          {STAGE_KEYS.map((key, i) => {
             const state = i < currentIndex ? "done" : i === currentIndex ? "active" : "upcoming";
             return (
-              <div key={s.key} className={`verify-tl-item verify-tl-${state}`}>
+              <div key={key} className={`verify-tl-item verify-tl-${state}`}>
                 <div className="verify-tl-rail">
                   <span className="verify-tl-node">
                     {state === "done" ? "✓" : state === "active" ? <span className="verify-tl-pulse" /> : ""}
                   </span>
-                  {i < STAGES.length - 1 && <span className="verify-tl-line" />}
+                  {i < STAGE_KEYS.length - 1 && <span className="verify-tl-line" />}
                 </div>
                 <div className="verify-tl-body">
-                  <strong>{s.label}</strong>
-                  {state === "active" && <p>{s.desc}</p>}
+                  <strong>{t(`verifyShell.stages.${key}.label`)}</strong>
+                  {state === "active" && <p>{t(`verifyShell.stages.${key}.desc`)}</p>}
                 </div>
               </div>
             );
@@ -39,8 +34,8 @@ export default function VerifyShell({ current, status, children }) {
         </div>
 
         <div className="verify-current-card">
-          <span className="verify-current-label">Currently</span>
-          <strong>{activeStage.label}</strong>
+          <span className="verify-current-label">{t("verifyShell.currently")}</span>
+          <strong>{activeLabel}</strong>
           <p>{status}</p>
         </div>
       </div>

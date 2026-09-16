@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function CameraCapture({ onCapture, facingMode = "environment", label = "Capture", circleFrame = false }) {
+  const { t } = useTranslation();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [active, setActive] = useState(false);
@@ -70,12 +72,12 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
           <span className="corner br" />
           <div className="verify-viewport-status">
             <span className={`verify-status-dot ${active ? "live" : ""}`} />
-            {active ? "Scanning face" : "Camera ready"}
+            {active ? t("camera.scanningFace") : t("camera.cameraReady")}
           </div>
         </div>
 
         <p className="verify-viewport-hint">
-          {active ? "Align your face inside the frame and hold still" : "Position your face in the frame to begin"}
+          {active ? t("camera.alignHold") : t("camera.positionFace")}
         </p>
 
         {error && <p className="verify-error">{error}</p>}
@@ -83,7 +85,7 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
         <div className="action-row" style={{ justifyContent: "center" }}>
           {!active ? (
             <button className="btn btn-primary btn-block" onClick={start}>
-              📷 Start Face Scan
+              {t("camera.startFaceScan")}
             </button>
           ) : (
             <>
@@ -91,7 +93,7 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
                 {label}
               </button>
               <button className="btn btn-outline" onClick={stop}>
-                Cancel
+                {t("camera.cancel")}
               </button>
             </>
           )}
@@ -104,7 +106,7 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
     <div>
       {!active && (
         <button className="btn btn-outline btn-block" onClick={start}>
-          📷 Open Camera
+          {t("camera.openCamera")}
         </button>
       )}
       {error && <p style={{ color: "var(--red)" }}>{error}</p>}
@@ -116,7 +118,7 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
               {label}
             </button>
             <button className="btn btn-outline" onClick={stop}>
-              Cancel
+              {t("camera.cancel")}
             </button>
           </div>
         </div>

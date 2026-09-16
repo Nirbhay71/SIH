@@ -1,22 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { openPipelineSocket } from "../lib/api";
 import VerifyShell from "../components/VerifyShell.jsx";
 import { ThinkingLoader } from "../components/Loader.jsx";
 
-const VISIBLE_STEPS = [
-  { key: "ocr", label: "OCR" },
-  { key: "validation", label: "Validation" },
-  { key: "tampering", label: "Tampering" },
-  { key: "face", label: "Face" },
-  { key: "risk_score", label: "Risk Assessment" },
-];
+const VISIBLE_STEP_KEYS = ["ocr", "validation", "tampering", "face", "risk_score"];
 
 const FOLDED_INTO_RISK = ["watchlist", "duplicate_check", "risk_score"];
 
 export default function Pipeline() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const skipToFace = searchParams.get("after") === "face";
   const [stepStatus, setStepStatus] = useState({});
@@ -63,27 +59,27 @@ export default function Pipeline() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
 
-  const activeLabel = VISIBLE_STEPS.find((s) => stepStatus[s.key] === "active")?.label;
-  const status = activeLabel ? `Running ${activeLabel}…` : "Running automated document & identity checks…";
+  const activeKey = VISIBLE_STEP_KEYS.find((k) => stepStatus[k] === "active");
+  const status = activeKey ? t("pipeline.running", { stage: t(`pipeline.steps.${activeKey}`) }) : t("pipeline.runningGeneric");
 
   return (
     <VerifyShell current="pipeline" status={status}>
-      <h2>Verification Pipeline</h2>
+      <h2>{t("pipeline.title")}</h2>
       <div className="stepper">
-        {VISIBLE_STEPS.map((step) => {
-          const s = stepStatus[step.key] || "pending";
+        {VISIBLE_STEP_KEYS.map((key) => {
+          const s = stepStatus[key] || "pending";
           return (
-            <div key={step.key} className={`step ${s}`}>
+            <div key={key} className={`step ${s}`}>
               <div className="dot">
                 {s === "passed" ? "✓" : s === "flagged" ? "!" : ""}
               </div>
-              <div className="label">{step.label}</div>
+              <div className="label">{t(`pipeline.steps.${key}`)}</div>
             </div>
           );
         })}
       </div>
 
-      {stepStatus.risk_score === "active" && <ThinkingLoader label="Computing final risk score" />}
+      {stepStatus.risk_score === "active" && <ThinkingLoader label={t("pipeline.computingRisk")} />}
 
       <div className="log-panel" ref={logRef}>
         {logs.map((msg, i) => (

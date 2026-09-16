@@ -1,5 +1,7 @@
 import { Routes, Route, Link, NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { HomeIcon, IdCardIcon, ChainIcon, ShieldIcon } from "./components/Icons.jsx";
+import LanguageSwitcher from "./components/LanguageSwitcher.jsx";
 import Landing from "./pages/Landing.jsx";
 import Setup from "./pages/Setup.jsx";
 import Capture from "./pages/Capture.jsx";
@@ -10,27 +12,29 @@ import Audit from "./pages/Audit.jsx";
 import AdminWatchlist from "./pages/AdminWatchlist.jsx";
 
 export default function App() {
+  const { t } = useTranslation();
   return (
     <div className="app-shell">
       <aside className="side-rail">
         <span className="rail-logo" aria-hidden="true">🛂</span>
-        <NavLink to="/" end title="Home"><HomeIcon /></NavLink>
-        <NavLink to="/verify/setup" title="Start Verification"><IdCardIcon /></NavLink>
-        <NavLink to="/audit" title="Audit Trail"><ChainIcon /></NavLink>
-        <NavLink to="/admin/watchlist" title="Admin"><ShieldIcon /></NavLink>
+        <NavLink to="/" end title={t("nav.home")}><HomeIcon /></NavLink>
+        <NavLink to="/verify/setup" title={t("nav.setup")}><IdCardIcon /></NavLink>
+        <NavLink to="/audit" title={t("nav.audit")}><ChainIcon /></NavLink>
+        <NavLink to="/admin/watchlist" title={t("nav.admin")}><ShieldIcon /></NavLink>
       </aside>
       <div className="app-main">
         <header className="topbar">
           <Link to="/" className="brand" style={{ textDecoration: "none" }}>
             <span className="brand-text">
-              Border Screening System
-              <small>SSB · AI-Based Fake Identity &amp; Document Screening (PS 26188)</small>
+              {t("appName")}
+              <small>{t("appTagline")}</small>
             </span>
           </Link>
           <nav>
-            <Link to="/audit">Audit Trail</Link>
-            <Link to="/admin/watchlist">Admin</Link>
-            <Link to="/verify/setup" className="btn-gradient">Start Verification →</Link>
+            <Link to="/audit">{t("nav.audit")}</Link>
+            <Link to="/admin/watchlist">{t("nav.admin")}</Link>
+            <LanguageSwitcher />
+            <Link to="/verify/setup" className="btn-gradient">{t("nav.startVerification")}</Link>
           </nav>
         </header>
         <main className="page">

@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { listWatchlist, addWatchlist, deleteWatchlist } from "../lib/api";
 
 export default function AdminWatchlist() {
+  const { t } = useTranslation();
   const [creds, setCreds] = useState(null);
   const [form, setForm] = useState({ username: "admin", password: "" });
   const [entries, setEntries] = useState([]);
@@ -17,7 +19,7 @@ export default function AdminWatchlist() {
       setEntries(data);
       setCreds(form);
     } catch {
-      setError("Invalid credentials");
+      setError(t("admin.invalidCredentials"));
     }
   }
 
@@ -42,14 +44,14 @@ export default function AdminWatchlist() {
   if (!creds) {
     return (
       <form className="card" style={{ maxWidth: 380, margin: "0 auto" }} onSubmit={login}>
-        <h2>Admin Login</h2>
-        <label>Username</label>
+        <h2>{t("admin.loginTitle")}</h2>
+        <label>{t("admin.username")}</label>
         <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-        <label>Password</label>
+        <label>{t("admin.password")}</label>
         <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         {error && <p style={{ color: "var(--red)" }}>{error}</p>}
-        <button className="btn btn-primary btn-block" type="submit">Log In</button>
-        <p className="mini" style={{ marginTop: 10 }}>Demo credentials: admin / admin123 (see backend .env)</p>
+        <button className="btn btn-primary btn-block" type="submit">{t("admin.logIn")}</button>
+        <p className="mini" style={{ marginTop: 10 }}>{t("admin.demoCredentials")}</p>
       </form>
     );
   }
@@ -57,33 +59,30 @@ export default function AdminWatchlist() {
   return (
     <div>
       <div className="card">
-        <h2>Add Watchlist Entry</h2>
-        <p className="subtitle mini">
-          Tip for the live demo: upload the presenter's own captured face photo here right before the demo, then
-          re-scan the same photo at the checkpoint to trigger a watchlist match on stage.
-        </p>
+        <h2>{t("admin.addEntryTitle")}</h2>
+        <p className="subtitle mini">{t("admin.addEntryTip")}</p>
         <form onSubmit={handleAdd}>
-          <label>Reference Label</label>
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Case #4471 (fictional)" />
-          <label>Photo</label>
+          <label>{t("admin.referenceLabel")}</label>
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("admin.referencePlaceholder")} />
+          <label>{t("admin.photo")}</label>
           <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} style={{ marginBottom: 14 }} />
-          <button className="btn btn-primary" type="submit">Add to Watchlist</button>
+          <button className="btn btn-primary" type="submit">{t("admin.addToWatchlist")}</button>
         </form>
       </div>
 
       <div className="card">
-        <h2>Watchlist Entries ({entries.length})</h2>
+        <h2>{t("admin.entriesTitle")} ({entries.length})</h2>
         {entries.map((e) => (
           <div key={e.id} className="watchlist-item">
             <img src={e.photo_url} alt={e.reference_label} />
             <div style={{ flex: 1 }}>
               <div>{e.reference_label}</div>
-              <div className="mini">Added {new Date(e.uploaded_at).toLocaleString()}</div>
+              <div className="mini">{t("admin.added")} {new Date(e.uploaded_at).toLocaleString()}</div>
             </div>
-            <button className="btn btn-outline" onClick={() => handleDelete(e.id)}>Remove</button>
+            <button className="btn btn-outline" onClick={() => handleDelete(e.id)}>{t("admin.remove")}</button>
           </div>
         ))}
-        {entries.length === 0 && <p className="mini">No entries yet.</p>}
+        {entries.length === 0 && <p className="mini">{t("admin.noEntries")}</p>}
       </div>
     </div>
   );
