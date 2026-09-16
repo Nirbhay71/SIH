@@ -20,7 +20,9 @@ from src.fusion.feature_builder import build_feature_vector
 from src.fusion.hard_gates import check_watchlist_hit, evaluate_hard_gates
 from src.fusion.risk_model import ModelNotAvailableError, run_fusion_model
 from src.ocr.field_normalization import normalize_date, normalize_document_number, normalize_name
+from src.ocr.field_ocr import ocr_full_document
 from src.ocr.mrz_extractor import extract_mrz
+from src.ocr.semantic_field_mapper import extract_semantic_fields
 from src.preprocessing.boundary_detection import crop_to_boundary, detect_document_boundary
 from src.preprocessing.deskew import deskew
 from src.preprocessing.format_normalization import normalize_to_array
@@ -98,6 +100,57 @@ def extract_ocr(preprocessed: dict, document_type_hint: str | None) -> OCRResult
             confidences.append(confidence)
             if confidence < 0.85:
                 low_confidence_fields.append(key)
+    else:
+        # No MRZ (Aadhaar, Voter ID, ration card, etc. — most of the
+        # document types this system's own acceptance_policy.py lists).
+        # This used to leave `fields` completely empty for every non-MRZ
+        # document, regardless of image quality — a real gap, not a
+        # quality issue.
+        #
+        # Runs PaddleOCR over the whole page rather than over this build's
+        # heuristic text-zone crops: PaddleOCR brings its own trained text
+        # detector, and feeding it pre-cut crops from the contour/morphology
+        # heuristic in region_segmentation.py threw that away in favour of a
+        # much cruder one — the visible symptom was characters sliced
+        # mid-glyph ("तIENDOB" where the page reads "DOB", "पु! MALE" for
+        # "पुरुष/ MALE"). Line labels below are positional (`line_0`,
+        # `line_1`, ... in reading order), not semantic; the semantic pass
+        # further down is what maps them to name/DOB/etc.
+        #
+        # Belt-and-suspenders around the whole block, not just per-line:
+        # PaddleOCR sharing a process with PyTorch (forgery classifier,
+        # timm) can hit a native DLL-load crash on Windows (observed:
+        # "[WinError 127] ... torch\lib\shm.dll") that is fixed by importing
+        # torch first (see api/main.py) — but low-level DLL failures aren't
+        # guaranteed to surface as a normal Python exception field_ocr's own
+        # try/except can catch cleanly, and this must never take down
+        # document analysis entirely the way it did before.
+        try:
+            for i, line in enumerate(ocr_full_document(image)[:25]):
+                key = f"line_{i}"
+                fields[key] = FieldExtraction(value=line.text, confidence=line.confidence)
+                confidences.append(line.confidence)
+                if line.confidence < 0.85:
+                    low_confidence_fields.append(key)
+        except Exception:
+            logger.exception("Field-level OCR failed for a non-MRZ document; continuing with fields extracted so far.")
+
+        # The raw line_N reads above are genuinely useful (an
+        # officer can read them directly), but downstream logic —
+        # acceptance_policy.py's age-bracket check in particular — looks
+        # for a field literally named "date_of_birth", so a real DOB the
+        # OCR actually read was being silently discarded, forcing every
+        # non-MRZ document into the "DOB unknown, manual review" fail-
+        # closed path even when the text was right there. Best-effort
+        # keyword/regex mapping, not a real layout understanding — explicitly
+        # lower-confidence than a true field-level read, and does not
+        # overwrite an existing key of the same name.
+        for key, value in extract_semantic_fields(fields).items():
+            if key not in fields:
+                fields[key] = value
+                confidences.append(value.confidence)
+                if value.confidence < 0.85:
+                    low_confidence_fields.append(key)
 
     avg_conf = float(np.mean(confidences)) if confidences else 0.0
     min_conf = float(np.min(confidences)) if confidences else 0.0

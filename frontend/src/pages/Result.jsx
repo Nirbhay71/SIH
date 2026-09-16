@@ -11,6 +11,65 @@ function riskBadgeClass(level) {
   return "badge-high";
 }
 
+/* Shows how the score was actually arrived at, rather than just asserting a
+   number: every weighted factor (including the ones that contributed zero,
+   so the officer can see what was checked and cleared), its weight, how
+   severely it fired, and the running total. A hard gate renders differently
+   because it isn't part of the weighted sum at all — it overrides it. */
+function RiskCalculation({ breakdown, score, t }) {
+  const rows = breakdown || [];
+  if (rows.length === 0) {
+    return <p className="mini">{t("result.noRiskFactors")}</p>;
+  }
+
+  const hardGate = rows.find((r) => r.hard_gate);
+  if (hardGate) {
+    return (
+      <div className="risk-hardgate">
+        <div className="risk-hardgate-title">⛔ {hardGate.factor}</div>
+        <p>{hardGate.reason}</p>
+        <div className="risk-hardgate-score">Risk forced to {score} / 100</div>
+      </div>
+    );
+  }
+
+  const totalWeight = rows.reduce((sum, r) => sum + (r.weight || 0), 0);
+  const totalPoints = rows.reduce((sum, r) => sum + (r.points || 0), 0);
+
+  return (
+    <div className="risk-calc">
+      <div className="risk-calc-head">
+        <span>Factor</span>
+        <span>Severity</span>
+        <span>Points</span>
+      </div>
+
+      {rows.map((r, i) => (
+        <div className={`risk-calc-row ${r.points > 0 ? "" : "is-clear"}`} key={i}>
+          <div className="risk-calc-factor">
+            <strong>{r.factor}</strong>
+            <span className="mini">{r.reason}</span>
+          </div>
+          <div className="risk-calc-bar-cell">
+            <div className="risk-calc-bar">
+              <span style={{ width: `${Math.round((r.severity || 0) * 100)}%` }} />
+            </div>
+            <span className="mini">{Math.round((r.severity || 0) * 100)}% of {r.weight}</span>
+          </div>
+          <div className="risk-calc-points">
+            {r.points > 0 ? `+${r.points}` : "0"}
+          </div>
+        </div>
+      ))}
+
+      <div className="risk-calc-total">
+        <span>Weighted total (weights sum to {totalWeight})</span>
+        <strong>{totalPoints.toFixed(1)} → {score} / 100</strong>
+      </div>
+    </div>
+  );
+}
+
 export default function Result() {
   const { sessionId } = useParams();
   const { t } = useTranslation();
@@ -135,7 +194,14 @@ export default function Result() {
             <p>
               {t("result.watchlist")}:{" "}
               {result.watchlist_match ? (
-                <strong style={{ color: "var(--red)" }}>{t("result.watchlistMatch")} {result.watchlist_match_ref}</strong>
+                <strong style={{ color: "var(--red)" }}>
+                  {t("result.watchlistMatch")} {result.watchlist_match_ref}
+                  {result.watchlist_match_source && (
+                    <span className="mini" style={{ fontWeight: 400, color: "var(--red)" }}>
+                      {" "}(matched via {result.watchlist_match_source === "live_face" ? "live camera face" : "document photo"})
+                    </span>
+                  )}
+                </strong>
               ) : (
                 t("result.noMatch")
               )}
@@ -152,17 +218,7 @@ export default function Result() {
           </div>
           <div className="mini">/ 100 — {result.risk_level?.toUpperCase()}</div>
         </div>
-        <ul className="breakdown-list">
-          {(result.risk_breakdown_json || []).map((b, i) => (
-            <li key={i}>
-              <span>{b.factor} <span className="mini">— {b.reason}</span></span>
-              <strong>+{b.points}</strong>
-            </li>
-          ))}
-          {(!result.risk_breakdown_json || result.risk_breakdown_json.length === 0) && (
-            <li><span className="mini">{t("result.noRiskFactors")}</span></li>
-          )}
-        </ul>
+        <RiskCalculation breakdown={result.risk_breakdown_json} score={result.risk_score} t={t} />
       </div>
 
       <div className="card">

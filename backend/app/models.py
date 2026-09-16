@@ -53,12 +53,21 @@ class VerificationRecord(Base):
     liveness_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     live_face_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
     live_face_image_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The face photo printed/embedded on the scanned document itself — a
+    # watchlisted person's document (genuine or forged) should be caught
+    # even if they don't present themselves live at the checkpoint, so
+    # watchlist screening checks this alongside live_face_embedding, not
+    # instead of it. None whenever no face could be detected in the
+    # document image (most non-photo-ID documents, or a document photo
+    # region the face detector couldn't isolate).
+    document_face_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # "ml_service" (real ArcFace embedding) or "mock" — see app/config.py's
     # ML_*/MOCK_* threshold split; comparisons across mismatched sources are
     # skipped rather than scored under the wrong threshold.
     face_embedding_source: Mapped[str] = mapped_column(String, default="mock")
 
     watchlist_match: Mapped[bool] = mapped_column(Boolean, default=False)
+    watchlist_match_source: Mapped[str | None] = mapped_column(String, nullable=True)
     watchlist_match_ref: Mapped[str | None] = mapped_column(String, nullable=True)
 
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)

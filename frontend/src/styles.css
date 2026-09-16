@@ -784,3 +784,82 @@ table.field-table th { color: var(--muted); font-size: 12px; text-transform: upp
 .verify-error { color: var(--red); font-size: 13px; font-weight: 600; }
 .verify-cta { min-width: 240px; background: linear-gradient(135deg, #0a0a0a, #262626); box-shadow: 0 8px 20px -8px rgba(0,0,0,0.4); }
 .verify-cta:hover:not(:disabled) { box-shadow: 0 10px 26px -8px rgba(0,0,0,0.5); }
+
+/* ---------- Risk score calculation table ---------- */
+.risk-calc { border-top: 1px solid var(--border); }
+.risk-calc-head,
+.risk-calc-row,
+.risk-calc-total {
+  display: grid;
+  grid-template-columns: 1fr 140px 64px;
+  gap: 14px;
+  align-items: center;
+}
+.risk-calc-head {
+  padding: 10px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.risk-calc-head span:last-child,
+.risk-calc-points { text-align: right; }
+
+.risk-calc-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.risk-calc-row.is-clear { opacity: 0.55; }
+.risk-calc-factor { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.risk-calc-factor strong { font-size: 14px; }
+.risk-calc-factor .mini { line-height: 1.4; }
+
+.risk-calc-bar-cell { display: flex; flex-direction: column; gap: 5px; }
+.risk-calc-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: #e9ecf1;
+  overflow: hidden;
+}
+.risk-calc-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gradient-a), var(--gradient-b));
+  transition: width 0.4s ease;
+}
+.risk-calc-row.is-clear .risk-calc-bar span { background: var(--green); }
+
+.risk-calc-points { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.risk-calc-row.is-clear .risk-calc-points { color: var(--muted); font-weight: 600; }
+
+.risk-calc-total {
+  padding: 14px 0 2px;
+  grid-template-columns: 1fr auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+.risk-calc-total strong { font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.risk-hardgate {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  padding: 18px;
+}
+.risk-hardgate-title { font-weight: 800; color: var(--red); margin-bottom: 6px; }
+.risk-hardgate p { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--text); }
+.risk-hardgate-score {
+  display: inline-block;
+  background: var(--red);
+  color: white;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 620px) {
+  .risk-calc-head { display: none; }
+  .risk-calc-row { grid-template-columns: 1fr 64px; }
+  .risk-calc-bar-cell { grid-column: 1 / -1; }
+}

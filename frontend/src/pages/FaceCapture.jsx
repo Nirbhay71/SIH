@@ -44,6 +44,18 @@ export default function FaceCapture() {
           <ThinkingLoader label={t("face.verifyingMatch")} />
         ) : (
           <>
+            {/* Upload-from-device was removed deliberately, not an oversight:
+                the liveness/anti-spoofing check (src/face/liveness.py,
+                DeepFace anti_spoofing=True) exists specifically to detect
+                "is this a live person, not a photo of a photo/screen" — a
+                file picked from disk is, by definition, exactly the input
+                that check exists to catch. Offering an upload option there
+                meant every upload had a real chance of being flagged as a
+                spoof and having its face-match silently skipped (Section
+                8.2: a failed liveness check bypasses match computation
+                entirely), which looked like a broken "not verified" bug
+                but was the security check doing its job on the wrong kind
+                of input. Camera-only makes liveness meaningful again. */}
             {!preview && (
               <CameraCapture
                 onCapture={(f, dataUrl) => {
@@ -54,24 +66,6 @@ export default function FaceCapture() {
                 label={t("face.captureFaceLabel")}
                 circleFrame
               />
-            )}
-
-            {!preview && (
-              <label className="dropzone" style={{ marginTop: 16 }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const f = e.target.files[0];
-                    if (f) {
-                      setFile(f);
-                      setPreview(URL.createObjectURL(f));
-                    }
-                  }}
-                />
-                {t("face.orUpload")}
-              </label>
             )}
 
             {preview && (

@@ -285,6 +285,7 @@ async def upload_face(
     document_bytes = Path(record.document_image_path).read_bytes() if record.document_image_path else b""
 
     live_embedding: list[float] | None = None
+    document_embedding: list[float] | None = None
     face_embedding_source = "mock"
 
     if record.analysis_source == "ml_service":
@@ -299,6 +300,15 @@ async def upload_face(
             await manager.emit(session_id, "face", "progress", f"Liveness check: {'passed' if liveness_passed else 'FAILED' if liveness_passed is False else 'unavailable'}.")
 
             live_embedding = await ml_client.embed_face(live_face_bytes, file.filename or "live.jpg")
+            # Watchlist screening must also catch a watchlisted person's own
+            # document photo (genuine or forged) — see model comment on
+            # document_face_embedding — so this is computed here too, not
+            # just the live capture. document_bytes is the whole scanned
+            # page, not a pre-cropped face, but /embed runs its own face
+            # detector over the full image and simply finds nothing (None)
+            # on a document type with no photo — never raises.
+            if document_bytes:
+                document_embedding = await ml_client.embed_face(document_bytes, "document.jpg")
             face_embedding_source = "ml_service"
 
             gate = (ml_result.get("risk_assessment") or {}).get("gate_triggered")
@@ -309,12 +319,14 @@ async def upload_face(
             liveness_passed = run_liveness(live_face_bytes)
             face_match_score = similarity_between_images(document_bytes, live_face_bytes, force_match=not simulate_mismatch)
             live_embedding = embed_face(live_face_bytes)
+            document_embedding = embed_face(document_bytes) if document_bytes else None
             face_embedding_source = "mock"
     else:
         liveness_passed = run_liveness(live_face_bytes)
         await manager.emit(session_id, "face", "progress", f"Liveness check: {'passed' if liveness_passed else 'FAILED'}.")
         face_match_score = similarity_between_images(document_bytes, live_face_bytes, force_match=not simulate_mismatch)
         live_embedding = embed_face(live_face_bytes)
+        document_embedding = embed_face(document_bytes) if document_bytes else None
         face_embedding_source = "mock"
 
     match_label = f"{face_match_score * 100:.1f}%" if face_match_score is not None else "not computed"
@@ -323,12 +335,20 @@ async def upload_face(
     record.face_match_score = face_match_score
     record.liveness_passed = liveness_passed
     record.live_face_embedding = live_embedding
+    record.document_face_embedding = document_embedding
     record.face_embedding_source = face_embedding_source
 
     watchlist_threshold = ML_WATCHLIST_MATCH_THRESHOLD if face_embedding_source == "ml_service" else MOCK_WATCHLIST_MATCH_THRESHOLD
     duplicate_threshold = ML_DUPLICATE_FACE_SIMILARITY_THRESHOLD if face_embedding_source == "ml_service" else MOCK_DUPLICATE_FACE_SIMILARITY_THRESHOLD
 
     # --- Watchlist check ---
+    # Checks BOTH the live camera capture and the document's own printed
+    # photo against every watchlist entry — not live-only. A watchlisted
+    # person presenting a genuine document still has their real photo on
+    # it, and a forged document built from a watchlisted person's real
+    # photo should be caught too; restricting this to the live face missed
+    # both cases. Either source matching is enough to flag it, and the
+    # result records which one fired so an officer isn't left guessing.
     await manager.emit(session_id, "watchlist", "started", "Comparing against watchlist database...")
     wl_result = await db.execute(select(WatchlistFace))
     watchlist_entries = wl_result.scalars().all()
@@ -336,24 +356,32 @@ async def upload_face(
 
     watchlist_match = False
     watchlist_ref = None
-    if live_embedding is not None:
-        best_score = 0.0
+    watchlist_source = None
+    candidates = [("live_face", live_embedding), ("document_photo", document_embedding)]
+    for source_label, embedding in candidates:
+        if embedding is None or watchlist_match:
+            continue
         for entry in watchlist_entries:
             if entry.embedding_source != face_embedding_source:
                 continue  # different embedding spaces — not comparable
-            score = cosine_similarity(live_embedding, entry.embedding)
-            if score > best_score:
-                best_score = score
+            score = cosine_similarity(embedding, entry.embedding)
             if score >= watchlist_threshold:
                 watchlist_match = True
                 watchlist_ref = entry.reference_label
+                watchlist_source = source_label
                 break
 
     record.watchlist_match = watchlist_match
     record.watchlist_match_ref = watchlist_ref
+    record.watchlist_match_source = watchlist_source
 
     if watchlist_match:
-        await manager.emit(session_id, "watchlist", "error", f"⚠️ Match found: {watchlist_ref}.", {"match": True, "ref": watchlist_ref})
+        source_desc = "live camera face" if watchlist_source == "live_face" else "document photo"
+        await manager.emit(
+            session_id, "watchlist", "error",
+            f"⚠️ Match found: {watchlist_ref} (matched via {source_desc}).",
+            {"match": True, "ref": watchlist_ref, "source": watchlist_source},
+        )
     else:
         await manager.emit(session_id, "watchlist", "done", "No match found.", {"match": False})
 
@@ -433,6 +461,7 @@ async def upload_face(
         document_not_accepted=record.document_accepted is False,
         document_not_accepted_reason=record.document_acceptance_reason,
         liveness_passed=record.liveness_passed,
+        watchlist_match_source=record.watchlist_match_source,
     )
     record.risk_score = risk["risk_score"]
     record.risk_level = risk["risk_level"]
@@ -518,6 +547,7 @@ def _serialize(record: VerificationRecord) -> dict:
         "liveness_passed": record.liveness_passed,
         "watchlist_match": record.watchlist_match,
         "watchlist_match_ref": record.watchlist_match_ref,
+        "watchlist_match_source": record.watchlist_match_source,
         "latitude": record.latitude,
         "longitude": record.longitude,
         "travel_direction": record.travel_direction,

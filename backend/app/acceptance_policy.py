@@ -92,6 +92,20 @@ def parse_dob(raw: str | None) -> date | None:
         except ValueError:
             continue
 
+    # ml-service's semantic_field_mapper.py (non-MRZ documents — Aadhaar,
+    # Voter ID, etc.) reads a DOB line via free-text OCR, and separators
+    # ("/", "-") are sometimes lost in that read even when the digits
+    # themselves are correct — an 8-digit DDMMYYYY run with no separator.
+    # A wrong-length digit run (anything but exactly 8) is genuinely
+    # corrupted OCR, not just missing separators, and must NOT be guessed
+    # at — falls through to the fail-closed None below, same as always.
+    if len(raw) == 8 and raw.isdigit():
+        dd, mm, yyyy = int(raw[0:2]), int(raw[2:4]), int(raw[4:8])
+        try:
+            return date(yyyy, mm, dd)
+        except ValueError:
+            return None
+
     return None
 
 
