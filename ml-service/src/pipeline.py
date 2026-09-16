@@ -24,7 +24,7 @@ from src.ocr.mrz_extractor import extract_mrz
 from src.preprocessing.boundary_detection import crop_to_boundary, detect_document_boundary
 from src.preprocessing.deskew import deskew
 from src.preprocessing.format_normalization import normalize_to_array
-from src.preprocessing.quality_gate import check_quality
+from src.preprocessing.quality_gate import check_quality, quality_flags
 from src.preprocessing.region_segmentation import find_mrz_zone, find_photo_region, find_text_field_zones
 from src.schemas import FaceVerificationResult, FieldExtraction, IdentityDedupResult, OCRResult, PipelineResult
 from src.tampering.detect import run_tampering_detection
@@ -53,7 +53,12 @@ def preprocess(raw_bytes: bytes, filename_hint: str = "") -> dict:
 
     passed, reason, score = check_quality(image)
     if not passed:
+        # Only the near-zero-pixel degenerate case reaches here now — see
+        # quality_gate.py's module docstring for why ordinary blur/glare/
+        # low-but-nonzero-resolution issues no longer block extraction.
         return {"status": "quality_rejected", "reason": reason, "score": score}
+
+    flags = quality_flags(image)
 
     mrz_box = find_mrz_zone(image)
     photo_box = find_photo_region(image)
@@ -64,6 +69,7 @@ def preprocess(raw_bytes: bytes, filename_hint: str = "") -> dict:
         "image": image,
         "boundary_detection_failed": boundary_failed,
         "deskew_skipped_large_angle": deskew_skipped,
+        "quality_flags": flags,
         "mrz_box": mrz_box,
         "photo_box": photo_box,
         "field_boxes": field_boxes,
@@ -108,6 +114,7 @@ def extract_ocr(preprocessed: dict, document_type_hint: str | None) -> OCRResult
         ocr_confidence_avg=avg_conf,
         ocr_confidence_min=min_conf,
         low_confidence_fields=low_confidence_fields,
+        quality_flags=preprocessed.get("quality_flags", []),
     )
 
 

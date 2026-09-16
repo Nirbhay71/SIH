@@ -32,3 +32,4 @@ torchvision==0.19.1
 pyyaml==6.0.2
 pytest==8.3.3
 piexif==1.1.3
+pymupdf==1.28.2  # required for PDF document uploads (src/preprocessing/format_normalization.py); PDF support silently fell back to mock analysis data without this installed

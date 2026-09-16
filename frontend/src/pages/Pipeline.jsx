@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { openPipelineSocket } from "../lib/api";
+import FlowProgress from "../components/FlowProgress.jsx";
+import { ThinkingLoader } from "../components/Loader.jsx";
 
 const VISIBLE_STEPS = [
   { key: "ocr", label: "OCR" },
@@ -63,6 +65,7 @@ export default function Pipeline() {
 
   return (
     <div>
+      <FlowProgress current="pipeline" />
       <div className="card">
         <h2>Verification Pipeline</h2>
         <div className="stepper">
@@ -78,6 +81,8 @@ export default function Pipeline() {
             );
           })}
         </div>
+
+        {stepStatus.risk_score === "active" && <ThinkingLoader label="Computing final risk score" />}
 
         <div className="log-panel" ref={logRef}>
           {logs.map((msg, i) => (

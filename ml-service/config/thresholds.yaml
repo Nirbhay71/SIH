@@ -6,7 +6,8 @@
 
 preprocessing:
   blur_variance_min: 100.0          # ILLUSTRATIVE — ends of a manual blurry/sharp sample sweep, see justifications doc
-  glare_pixel_fraction_max: 0.15    # ILLUSTRATIVE
+  glare_pixel_fraction_max: 0.25    # ILLUSTRATIVE — raised from 0.15 after real phone-camera photos of laminated passports (glossy surface, flash/ambient reflection) were rejected despite being fully readable
+  min_dimension_px: 400             # ILLUSTRATIVE — below this, MRZ text is too few pixels tall for passporteye to read reliably; a 292x377px real-world screenshot produced confidently-wrong (not just low-confidence) field values below this size
 
 ocr:
   field_confidence_min: 0.85

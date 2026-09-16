@@ -23,9 +23,10 @@ export async function startVerification({ travel_direction, latitude, longitude 
   return handle(res);
 }
 
-export async function uploadDocument(sessionId, file) {
+export async function uploadDocument(sessionId, file, documentTypeHint) {
   const form = new FormData();
   form.append("file", file);
+  if (documentTypeHint) form.append("document_type_hint", documentTypeHint);
   const res = await fetch(`${BASE}/verification/${sessionId}/document`, { method: "POST", body: form });
   return handle(res);
 }

@@ -14,7 +14,7 @@ async def verify_chain(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(VerificationRecord)
         .where(VerificationRecord.record_hash.is_not(None))
-        .order_by(VerificationRecord.decided_at.asc())
+        .order_by(VerificationRecord.chain_sequence.asc())
     )
     records = result.scalars().all()
 

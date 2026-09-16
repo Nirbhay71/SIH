@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getResult, submitDecision } from "../lib/api";
+import FlowProgress from "../components/FlowProgress.jsx";
+import { ThinkingLoader, Spinner } from "../components/Loader.jsx";
 
 function riskBadgeClass(level) {
   if (level === "low") return "badge-low";
@@ -40,13 +42,42 @@ export default function Result() {
   }
 
   if (error) return <p style={{ color: "var(--red)" }}>{error}</p>;
-  if (!result) return <p>Loading result...</p>;
+  if (!result) return (
+    <div>
+      <FlowProgress current="result" />
+      <div className="card">
+        <ThinkingLoader label="Compiling verification result" />
+      </div>
+    </div>
+  );
 
   const fields = result.ocr_raw_json?.fields || {};
   const validation = result.validation_result_json || { passed: true, failures: [] };
 
   return (
     <div>
+      <FlowProgress current="result" />
+      {result.analysis_source === "mock" && (
+        <div className="card" style={{ background: "#fffbeb", border: "2px solid var(--yellow)" }}>
+          <h2 style={{ color: "var(--yellow)" }}>⚠️ Demo Data — ML Service Unavailable</h2>
+          <p>
+            The real AI analysis service (OCR, face verification, tampering detection) could not be reached when this
+            document was processed, so the system fell back to <strong>randomly generated placeholder data</strong> for
+            demo continuity. None of the fields, scores, or the risk assessment below reflect the actual uploaded
+            document — please re-run verification once the ML service is back online.
+          </p>
+          {result.ml_fallback_reason && (
+            <p className="mini" style={{ marginTop: 10 }}>Technical reason: {result.ml_fallback_reason}</p>
+          )}
+        </div>
+      )}
+      {result.document_accepted === false && (
+        <div className="card" style={{ background: "#fef2f2", border: "2px solid var(--red)" }}>
+          <h2 style={{ color: "var(--red)" }}>🚫 Document Not Accepted</h2>
+          <p>{result.document_acceptance_reason}</p>
+        </div>
+      )}
+
       <div className="card">
         <h2>
           Verification Result{" "}
@@ -71,6 +102,12 @@ export default function Result() {
 
           <div>
             <h2 style={{ fontSize: 15 }}>Extracted Fields</h2>
+            {(result.ocr_raw_json?.ml_detail?.quality_flags || []).length > 0 && (
+              <p className="mini" style={{ color: "var(--yellow)", marginTop: -8, marginBottom: 10 }}>
+                ⚠️ Image quality notes: {result.ocr_raw_json.ml_detail.quality_flags.join(", ")} — extraction was still
+                attempted, but results below may be less reliable than a clean, well-lit photo.
+              </p>
+            )}
             <table className="field-table">
               <tbody>
                 {Object.entries(fields).map(([key, val]) => (
@@ -154,9 +191,15 @@ export default function Result() {
           </p>
         ) : (
           <div className="action-row">
-            <button className="btn btn-green" disabled={deciding} onClick={() => decide("approved")}>Approve</button>
-            <button className="btn btn-red" disabled={deciding} onClick={() => decide("rejected")}>Reject</button>
-            <button className="btn btn-yellow" disabled={deciding} onClick={() => decide("escalated")}>Escalate</button>
+            <button className="btn btn-green" disabled={deciding} onClick={() => decide("approved")}>
+              {deciding && <Spinner size={14} inline />}Approve
+            </button>
+            <button className="btn btn-red" disabled={deciding} onClick={() => decide("rejected")}>
+              {deciding && <Spinner size={14} inline />}Reject
+            </button>
+            <button className="btn btn-yellow" disabled={deciding} onClick={() => decide("escalated")}>
+              {deciding && <Spinner size={14} inline />}Escalate
+            </button>
           </div>
         )}
         {result.record_hash && <p className="mini">Audit hash: {result.record_hash}</p>}

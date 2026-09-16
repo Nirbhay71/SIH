@@ -25,7 +25,7 @@ class FieldExtraction(BaseModel):
 
 class PreprocessResult(BaseModel):
     status: Literal["ok", "quality_rejected"]
-    reason: Literal["blur", "glare"] | None = None
+    reason: Literal["blur", "glare", "low_resolution"] | None = None
     score: float | None = None
     image_path: str | None = None
     original_bytes_path: str | None = None
@@ -47,7 +47,11 @@ class OCRResult(BaseModel):
     document_type_classification_method: Literal["hinted", "heuristic"] = "heuristic"
     fields: dict[str, FieldExtraction] = Field(default_factory=dict)
     mrz_raw: list[str] | None = None
-    mrz_check_digits: dict[str, str] | None = None
+    # Values can legitimately be None (e.g. a passport with no personal-
+    # number field has no check digit for it) — verified against a real
+    # document (see docs/LIMITATIONS.md); this must not be dict[str, str],
+    # which crashed the whole request into processing_error on that case.
+    mrz_check_digits: dict[str, str | None] | None = None
     mrz_extraction_method: Literal["passporteye", "fallback_ocr", "not_applicable"] = "not_applicable"
     mrz_valid_score: float | None = None
     ocr_confidence_avg: float = 0.0
@@ -77,6 +81,13 @@ class TamperingResult(BaseModel):
     metadata_flags: list[str] = Field(default_factory=list)
     forgery_classifier_probability: float
     forgery_classifier_threshold_used: float
+    # False whenever the fine-tuned head (training/train_forgery_head.py)
+    # hasn't been trained yet — forgery_classifier_probability is then an
+    # untrained model's output (documented in
+    # src/tampering/forgery_classifier.py as "NOT meaningful"), and callers
+    # must not treat it as a real signal (e.g. must exclude it from any
+    # aggregate tampering score) while this is False.
+    forgery_classifier_calibrated: bool = False
     heatmap_regions: list[BoundingBox] | None = None
 
 

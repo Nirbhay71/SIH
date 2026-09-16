@@ -1,10 +1,15 @@
 """Section 10.4 — quality-gate behavior on deliberately blurry/glared/
-well-formed synthetic sample images."""
+well-formed synthetic sample images.
+
+check_quality() itself only hard-blocks a near-zero-pixel degenerate
+image now (see quality_gate.py's module docstring for why blur/glare/
+low-resolution no longer block extraction outright) — those are tested
+via quality_flags() instead, which is always computed but never blocks."""
 import cv2
 import numpy as np
 import pytest
 
-from src.preprocessing.quality_gate import check_quality
+from src.preprocessing.quality_gate import ABSOLUTE_MIN_DIMENSION_PX, check_quality, quality_flags
 
 
 def _sharp_document_image() -> np.ndarray:
@@ -34,17 +39,26 @@ def test_sharp_well_formed_image_passes():
     passed, reason, score = check_quality(_sharp_document_image())
     assert passed
     assert reason is None
+    assert quality_flags(_sharp_document_image()) == []
 
 
-def test_blurry_image_rejected():
+def test_blurry_image_not_hard_blocked_but_flagged():
     passed, reason, score = check_quality(_blurry_document_image())
-    assert not passed
-    assert reason == "blur"
-    assert score is not None
+    assert passed  # no longer hard-blocked — extraction still proceeds
+    assert reason is None
+    assert "blur" in quality_flags(_blurry_document_image())
 
 
-def test_glare_image_rejected():
+def test_glare_image_not_hard_blocked_but_flagged():
     passed, reason, score = check_quality(_glare_document_image())
+    assert passed  # no longer hard-blocked — extraction still proceeds
+    assert reason is None
+    assert "glare" in quality_flags(_glare_document_image())
+
+
+def test_degenerate_tiny_image_still_hard_blocked():
+    tiny = np.full((ABSOLUTE_MIN_DIMENSION_PX - 1, ABSOLUTE_MIN_DIMENSION_PX - 1, 3), 200, dtype=np.uint8)
+    passed, reason, score = check_quality(tiny)
     assert not passed
-    assert reason == "glare"
+    assert reason == "low_resolution"
     assert score is not None

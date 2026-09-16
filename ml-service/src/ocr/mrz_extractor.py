@@ -57,14 +57,29 @@ def extract_mrz(image: np.ndarray) -> MRZExtractionResult:
     data = mrz.to_dict()
     raw_lines = [data.get("raw_text", "")] if "raw_text" in data else None
     if hasattr(mrz, "aux") and "text" in getattr(mrz, "aux", {}):
-        raw_lines = mrz.aux["text"]
+        aux_text = mrz.aux["text"]
+        # passporteye's pipeline "text" step returns a single raw-OCR string
+        # in some versions and a list of per-line strings in others; MRZExtractionResult
+        # always wants list[str], so normalize rather than assume either shape.
+        raw_lines = aux_text.splitlines() if isinstance(aux_text, str) else list(aux_text)
+
+    # MRZ fields are fixed-width and right-padded with "<" filler per ICAO
+    # 9303 (e.g. a 9-char document number field for a 7-char real number
+    # becomes "N1234567<"); this installed passporteye version returns that
+    # padding as-is in `number`/`personal_number` rather than stripping it,
+    # so a raw comparison against a real-world document number format
+    # always fails validation. Strip trailing fillers here, at the source,
+    # rather than in every downstream consumer.
+    document_number = data.get("number")
+    if document_number:
+        document_number = document_number.rstrip("<")
 
     fields = {
         "document_type": data.get("type"),
         "name": f"{data.get('surname', '')} {data.get('names', '')}".strip(),
         "surname": data.get("surname"),
         "given_names": data.get("names"),
-        "document_number": data.get("number"),
+        "document_number": document_number,
         "nationality": data.get("nationality"),
         "date_of_birth": data.get("date_of_birth"),
         "sex": data.get("sex"),

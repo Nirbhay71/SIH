@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function CameraCapture({ onCapture, facingMode = "environment", label = "Capture" }) {
+export default function CameraCapture({ onCapture, facingMode = "environment", label = "Capture", circleFrame = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [active, setActive] = useState(false);
@@ -8,10 +8,13 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
 
   async function start() {
     setError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Camera unavailable: this browser (or non-HTTPS/non-localhost context) doesn't support camera access.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
       setActive(true);
     } catch (e) {
       setError("Camera unavailable: " + e.message);
@@ -20,10 +23,21 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
 
   function stop() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
     setActive(false);
   }
 
   useEffect(() => () => stop(), []);
+
+  // The <video> element only mounts once `active` is true, so the stream
+  // can't be attached inside start() — videoRef.current is still null at
+  // that point (React hasn't re-rendered yet). Attach it here instead,
+  // once the element actually exists.
+  useEffect(() => {
+    if (active && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [active]);
 
   function capture() {
     const video = videoRef.current;
@@ -36,6 +50,47 @@ export default function CameraCapture({ onCapture, facingMode = "environment", l
       onCapture(file, canvas.toDataURL("image/png"));
       stop();
     }, "image/png");
+  }
+
+  if (circleFrame) {
+    return (
+      <div>
+        <div className="face-scan-wrap">
+          <div className="face-scan-circle">
+            {active ? (
+              <video ref={videoRef} autoPlay playsInline />
+            ) : (
+              <div className="face-scan-placeholder">🧑</div>
+            )}
+          </div>
+          {active && <span className="scan-line" />}
+          <span className="corner tl" />
+          <span className="corner tr" />
+          <span className="corner bl" />
+          <span className="corner br" />
+        </div>
+        <div className="face-scan-label">{active ? "Scanning..." : "Ready to scan"}</div>
+
+        {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+
+        <div className="action-row" style={{ justifyContent: "center" }}>
+          {!active ? (
+            <button className="btn btn-primary" onClick={start}>
+              📷 Start Face Scan
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-primary" onClick={capture}>
+                {label}
+              </button>
+              <button className="btn btn-outline" onClick={stop}>
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (

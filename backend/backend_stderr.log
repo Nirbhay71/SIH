@@ -1,0 +1,37 @@
+INFO:     Started server process [3976]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+ml-service unavailable for document analysis (session=4c2427f5-1dce-48e7-b63c-9c9be3a085d3): Internal processing error: PDF input requires the optional 'pymupdf' dependency, which is not installed in this environment.
+ml-service unavailable for document analysis (session=8a2f2538-a360-4def-8ede-4a7c81310e9b): Client error '400 Bad Request' for url 'http://127.0.0.1:8001/screen'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 — Uploaded file does not have recognizable image/PDF magic bytes.
+INFO:     ('127.0.0.1', 58286) - "WebSocket /api/verification/8a2f2538-a360-4def-8ede-4a7c81310e9b/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 55438) - "WebSocket /api/verification/8a2f2538-a360-4def-8ede-4a7c81310e9b/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 51431) - "WebSocket /api/verification/14b5335b-5c5d-4931-a9b6-210cd3f274d0/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 58591) - "WebSocket /api/verification/14b5335b-5c5d-4931-a9b6-210cd3f274d0/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 61811) - "WebSocket /api/verification/5ef74dba-371b-4bb7-9aed-990619dd68e7/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 54246) - "WebSocket /api/verification/5ef74dba-371b-4bb7-9aed-990619dd68e7/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 60824) - "WebSocket /api/verification/05639a3d-ec7b-41ef-b531-d8a06d1e3a64/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 54410) - "WebSocket /api/verification/05639a3d-ec7b-41ef-b531-d8a06d1e3a64/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 50474) - "WebSocket /api/verification/c03ac08d-06d5-4362-9bb8-58886d29066b/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 54053) - "WebSocket /api/verification/c03ac08d-06d5-4362-9bb8-58886d29066b/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed

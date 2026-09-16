@@ -37,7 +37,7 @@ def run_tampering_detection(
 
     metadata_flag_count, metadata_flags = analyze_metadata(original_bytes)
 
-    forgery_probability, _calibrated = classify_forgery_probability(image)
+    forgery_probability, calibrated = classify_forgery_probability(image)
 
     return TamperingResult(
         photo_tamper_score=photo_score,
@@ -48,5 +48,6 @@ def run_tampering_detection(
         metadata_flags=metadata_flags,
         forgery_classifier_probability=forgery_probability,
         forgery_classifier_threshold_used=get_threshold(),
+        forgery_classifier_calibrated=calibrated,
         heatmap_regions=None,
     )

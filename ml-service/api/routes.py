@@ -8,7 +8,9 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from src.face.face_verification import get_embedding
 from src.pipeline import run_pipeline
+from src.preprocessing.format_normalization import normalize_to_array
 
 logger = logging.getLogger("api")
 router = APIRouter()
@@ -24,6 +26,16 @@ _KNOWN_MAGIC_BYTES = {
     b"MM\x00*": "tiff",
     b"%PDF": "pdf",
 }
+
+# WebP's magic bytes aren't a fixed prefix like the formats above — it's a
+# RIFF container ("RIFF" + 4-byte size + "WEBP"), so it needs its own check
+# rather than a dict entry. Missing this rejected every real-world image
+# saved from a browser image search (Google Images serves WebP by default),
+# which silently fell back to mock analysis data with a confusing generic
+# "unrecognized magic bytes" error — genuinely common real-world input, not
+# an edge case.
+def _is_webp(raw_bytes: bytes) -> bool:
+    return len(raw_bytes) >= 12 and raw_bytes[0:4] == b"RIFF" and raw_bytes[8:12] == b"WEBP"
 
 _request_log: dict[str, deque] = defaultdict(deque)
 
@@ -54,7 +66,7 @@ def _validate_upload(raw_bytes: bytes, filename: str) -> None:
     if ext in ("heic", "heif"):
         return  # HEIC magic-byte sniffing is not implemented; format support itself is optional (see README.md)
 
-    if not any(raw_bytes.startswith(magic) for magic in _KNOWN_MAGIC_BYTES):
+    if not any(raw_bytes.startswith(magic) for magic in _KNOWN_MAGIC_BYTES) and not _is_webp(raw_bytes):
         raise HTTPException(400, "Uploaded file does not have recognizable image/PDF magic bytes.")
 
 
@@ -127,3 +139,34 @@ async def screen_document(
         "face_result": result.face_result.model_dump() if result.face_result else None,
         "risk_assessment": result.risk_assessment.model_dump() if result.risk_assessment else None,
     }
+
+
+@router.post("/embed")
+async def embed_face(request: Request, image: UploadFile = File(...)):
+    """Not part of the problem-statement-mandated `/screen` contract (Section
+    9A) — a narrow extra endpoint so a caller who needs a raw face embedding
+    directly (e.g. enrolling a watchlist reference photo, or storing a
+    duplicate-identity-check vector) can get one in the same ArcFace vector
+    space `/screen`'s internal face matching uses, without re-deriving it
+    from a face-match distance. Never exposes embeddings for two uploaded
+    images to be compared client-side against each other in a way that
+    bypasses the liveness-gated logic in `/screen` — this only returns a
+    single image's embedding."""
+    client_id = request.client.host if request.client else "unknown"
+    _rate_limit_check(client_id)
+
+    raw_bytes = await image.read()
+    _validate_upload(raw_bytes, image.filename or "")
+
+    try:
+        array = normalize_to_array(raw_bytes, image.filename or "")
+        embedding = get_embedding(array)
+    except ImportError:
+        return {"embedding": None, "reason": "face_embedding_unavailable"}
+    except Exception:
+        logger.exception("unhandled error in /embed")
+        return {"embedding": None, "reason": "processing_error"}
+
+    if embedding is None:
+        return {"embedding": None, "reason": "no_face_detected"}
+    return {"embedding": embedding, "reason": None}

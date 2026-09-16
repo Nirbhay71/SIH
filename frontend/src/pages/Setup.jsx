@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { startVerification } from "../lib/api";
+import FlowProgress from "../components/FlowProgress.jsx";
 
 export default function Setup() {
   const navigate = useNavigate();
@@ -45,23 +46,26 @@ export default function Setup() {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 480, margin: "0 auto" }}>
-      <h2>Checkpoint Setup</h2>
+    <div style={{ maxWidth: 480, margin: "0 auto" }}>
+      <FlowProgress current="setup" />
+      <div className="card">
+        <h2>Checkpoint Setup</h2>
 
-      <label>Travel Direction</label>
-      <select value={direction} onChange={(e) => setDirection(e.target.value)}>
-        <option value="entering_india">Entering India</option>
-        <option value="entering_nepal">Entering Nepal</option>
-      </select>
+        <label>Travel Direction</label>
+        <select value={direction} onChange={(e) => setDirection(e.target.value)}>
+          <option value="entering_india">Entering India</option>
+          <option value="entering_nepal">Entering Nepal</option>
+        </select>
 
-      <div className="status-pill">📍 {locStatus}</div>
+        <div className="status-pill">📍 {locStatus}</div>
 
-      {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+        {error && <p style={{ color: "var(--red)" }}>{error}</p>}
 
-      <div className="action-row">
-        <button className="btn btn-primary btn-block" disabled={!coords || starting} onClick={handleContinue}>
-          {starting ? "Starting..." : "Continue to Document Capture"}
-        </button>
+        <div className="action-row">
+          <button className="btn btn-primary btn-block" disabled={!coords || starting} onClick={handleContinue}>
+            {starting ? "Starting..." : "Continue to Document Capture"}
+          </button>
+        </div>
       </div>
     </div>
   );

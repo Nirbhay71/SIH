@@ -1,7 +1,13 @@
 # Per-document-type format rules (Section 1B / 4A of the build spec).
-# Scope: SSB border-checkpoint documents only. Domestic Indian IDs (Aadhaar,
-# PAN, Voter ID) are explicitly out of scope (Section 1B) and must never be
-# added here.
+# Scope: SSB border-checkpoint documents only. Domestic Indian IDs that are
+# NOT accepted proof of citizenship at the India-Nepal crossing — Aadhaar,
+# PAN, driving licence — are explicitly out of scope and must never be
+# added here (see app/acceptance_policy.py in the backend for the
+# citizenship/travel-document acceptance rules, which is a separate check
+# from the format rules here). Voter ID, Emergency Certificate, and
+# Identity Certificate ARE accepted proof of citizenship for this specific
+# crossing per Embassy of India, Kathmandu, so — unlike the excluded
+# domestic IDs above — they get real format entries below.
 
 indian_passport:
   has_mrz: true
@@ -61,3 +67,28 @@ border_permit_rap:
     default:
       permit_number_pattern: null
       confidence_penalty_if_unmatched: 0.2
+
+# --- Accepted citizenship-proof documents for Indian nationals at this
+# crossing (see app/acceptance_policy.py) — format-validated like any other
+# in-scope document type, distinct from whether they're accepted at all.
+voter_id:
+  has_mrz: false
+  document_number_pattern: null   # EPIC number format varies by issuing state; not enforced
+  fields: [name, epic_number, date_of_birth, gender, address]
+
+emergency_certificate:
+  has_mrz: false
+  document_number_pattern: null   # issued ad hoc by the Embassy for special cases; no fixed format to check against
+  fields: [holder_name, certificate_number, date_of_issue, issuing_authority]
+
+identity_certificate:
+  has_mrz: false
+  document_number_pattern: null
+  fields: [holder_name, certificate_number, date_of_issue, issuing_authority]
+
+# Accepted only for the 15-18 age bracket (see acceptance_policy.py) —
+# still format-validated like any other in-scope document.
+school_identity_certificate:
+  has_mrz: false
+  document_number_pattern: null
+  fields: [holder_name, date_of_birth, school_name, principal_signature_present]

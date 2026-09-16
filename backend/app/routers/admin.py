@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ADMIN_USERNAME, ADMIN_PASSWORD, STORAGE_DIR
 from app.database import get_db
+from app import ml_client
 from app.models import WatchlistFace
 from app.modules.face import embed_face
 
@@ -36,15 +37,30 @@ async def add_watchlist(
     photo_path = STORAGE_DIR / "watchlist" / f"{reference_label.replace(' ', '_')}_{file.filename}"
     photo_path.write_bytes(image_bytes)
 
+    # Prefer a real ArcFace embedding (matches the space verification's
+    # live-capture embeddings use when ml-service is up — see app/routers/
+    # verification.py and app/config.py's ML_*/MOCK_* threshold split).
+    # Falls back to the mock hash-based embedding so watchlist enrollment
+    # still works when ml-service is unreachable.
+    try:
+        embedding = await ml_client.embed_face(image_bytes, file.filename or "watchlist.jpg")
+        embedding_source = "ml_service"
+        if embedding is None:
+            raise ml_client.MLServiceUnavailableError("no face detected")
+    except ml_client.MLServiceUnavailableError:
+        embedding = embed_face(image_bytes)
+        embedding_source = "mock"
+
     entry = WatchlistFace(
         reference_label=reference_label,
-        embedding=embed_face(image_bytes),
+        embedding=embedding,
+        embedding_source=embedding_source,
         photo_path=str(photo_path),
         uploaded_by=admin,
     )
     db.add(entry)
     await db.commit()
-    return {"id": entry.id, "reference_label": entry.reference_label}
+    return {"id": entry.id, "reference_label": entry.reference_label, "embedding_source": embedding_source}
 
 
 @router.get("/watchlist")

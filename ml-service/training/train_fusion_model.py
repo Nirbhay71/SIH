@@ -26,9 +26,24 @@ logger = logging.getLogger("training.train_fusion_model")
 ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts"
 
 HYPERPARAM_GRID = {
-    "max_depth": [3, 4, 5],
+    "max_depth": [2, 3, 4],
     "n_estimators": [100, 150, 200],
     "learning_rate": [0.05, 0.1, 0.15],
+}
+# On a small synthetic dataset, an unregularized tree can learn an overly
+# sharp threshold on a single feature (verified: an earlier training run
+# here scored a genuine document as 98% forged because photo_tamper_score
+# landed a few hundredths off the exact value the trees split on).
+# reg_lambda/min_child_weight/subsample/colsample_bytree all push toward
+# smoother, less feature-threshold-brittle splits — a fixed regularization
+# choice, not swept in the grid, since the grid already searches depth/
+# estimators/learning_rate and adding 4 more dimensions would make this
+# combinatorially slow for a 1-day build.
+REGULARIZATION = {
+    "reg_lambda": 5.0,
+    "min_child_weight": 5,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
 }
 
 
@@ -37,7 +52,7 @@ def _cross_validated_auc(X: np.ndarray, y: np.ndarray, params: dict, scale_pos_w
     aucs = []
     for train_idx, val_idx in skf.split(X, y):
         model = xgb.XGBClassifier(
-            **params, scale_pos_weight=scale_pos_weight, eval_metric="auc", use_label_encoder=False,
+            **params, **REGULARIZATION, scale_pos_weight=scale_pos_weight, eval_metric="auc", use_label_encoder=False,
         )
         model.fit(X[train_idx], y[train_idx])
         preds = model.predict_proba(X[val_idx])[:, 1]
@@ -72,7 +87,7 @@ def train(version: str | None = None) -> Path:
     logger.info("Selected hyperparameters: %s (mean CV AUC=%.4f)", best_params, best_auc)
 
     final_model = xgb.XGBClassifier(
-        **best_params, scale_pos_weight=scale_pos_weight, eval_metric="auc", use_label_encoder=False,
+        **best_params, **REGULARIZATION, scale_pos_weight=scale_pos_weight, eval_metric="auc", use_label_encoder=False,
     )
     final_model.fit(X_train, y_train)
 

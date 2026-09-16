@@ -25,7 +25,12 @@ class FaceVerificationUnavailableError(Exception):
     pass
 
 
-def _get_embedding(image: np.ndarray) -> list[float] | None:
+def get_embedding(image: np.ndarray) -> list[float] | None:
+    """Public entry point — also used directly by api/routes.py's /embed
+    endpoint, so a caller (e.g. the demo backend's watchlist enrollment and
+    duplicate-identity check) can obtain a real ArcFace embedding in the
+    same vector space `verify_faces` uses internally, without duplicating
+    the model-loading/detector config here."""
     from deepface import DeepFace
 
     try:
@@ -38,6 +43,10 @@ def _get_embedding(image: np.ndarray) -> list[float] | None:
     if not result:
         return None
     return result[0]["embedding"]
+
+
+# Back-compat alias for the internal name used elsewhere in this module.
+_get_embedding = get_embedding
 
 
 def cosine_distance(a: list[float], b: list[float]) -> float:
