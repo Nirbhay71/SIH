@@ -2,45 +2,13 @@
 > border-screening-frontend@0.1.0 dev
 > vite
 
+Re-optimizing dependencies because lockfile has changed
 
-  VITE v5.4.21  ready in 275 ms
+  VITE v5.4.21  ready in 734 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-5:16:02 pm [vite] hmr update /src/pages/Result.jsx
-5:25:03 pm [vite] hmr update /src/pages/Result.jsx
-5:54:20 pm [vite] hmr update /src/pages/Capture.jsx
-5:54:28 pm [vite] hmr update /src/pages/Capture.jsx
-5:54:37 pm [vite] hmr update /src/pages/Capture.jsx
-6:02:54 pm [vite] hmr update /src/pages/Result.jsx
-7:29:42 pm [vite] hmr update /src/pages/FaceCapture.jsx
-7:29:42 pm [vite] hmr update /src/styles.css
-7:29:42 pm [vite] hmr update /src/components/CameraCapture.jsx
-8:04:30 pm [vite] hmr update /src/pages/Capture.jsx
-8:04:30 pm [vite] hmr update /src/pages/FaceCapture.jsx
-8:04:30 pm [vite] hmr update /src/pages/Pipeline.jsx
-8:04:30 pm [vite] hmr update /src/components/CameraCapture.jsx
-8:04:30 pm [vite] hmr update /src/pages/Result.jsx
-8:04:30 pm [vite] hmr update /src/pages/Setup.jsx
-8:04:30 pm [vite] hmr update /src/styles.css
-8:27:21 pm [vite] hmr update /src/App.jsx
-8:27:21 pm [vite] hmr update /src/components/CameraCapture.jsx
-8:27:21 pm [vite] hmr update /src/components/VerifyShell.jsx
-8:27:21 pm [vite] hmr update /src/pages/AdminWatchlist.jsx
-8:27:21 pm [vite] page reload src/main.jsx
-8:27:21 pm [vite] hmr update /src/pages/Audit.jsx
-8:27:21 pm [vite] hmr update /src/pages/Capture.jsx
-8:27:21 pm [vite] hmr update /src/pages/FaceCapture.jsx
-8:27:21 pm [vite] hmr update /src/pages/Landing.jsx
-8:27:21 pm [vite] hmr update /src/pages/Pipeline.jsx
-8:27:21 pm [vite] hmr update /src/pages/Result.jsx
-8:27:21 pm [vite] hmr update /src/pages/Setup.jsx
-8:27:21 pm [vite] hmr update /src/styles.css
-8:39:13 pm [vite] page reload vite.config.js.timestamp-1789571353659-afbdb48407ebe8.mjs
-8:39:15 pm [vite] ✨ new dependencies optimized: i18next, react-i18next
-8:39:15 pm [vite] ✨ optimized dependencies changed. reloading
-9:10:39 pm [vite] hmr update /src/pages/Result.jsx
-9:10:59 pm [vite] hmr update /src/pages/Result.jsx
-9:11:21 pm [vite] hmr update /src/styles.css
-9:38:11 pm [vite] hmr update /src/pages/FaceCapture.jsx
-10:10:13 pm [vite] hmr update /src/pages/Result.jsx
+8:16:26 am [vite] ✨ new dependencies optimized: framer-motion
+8:16:26 am [vite] ✨ optimized dependencies changed. reloading
+8:21:56 am [vite] hmr update /src/styles.css
+8:21:56 am [vite] hmr update /src/App.jsx

@@ -1,0 +1,16 @@
+INFO:     Started server process [23000]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     ('127.0.0.1', 61546) - "WebSocket /api/verification/da967110-9068-45c6-9c5c-c5d397497dd2/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 50821) - "WebSocket /api/verification/da967110-9068-45c6-9c5c-c5d397497dd2/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 53265) - "WebSocket /api/verification/ca434497-c0e9-4d01-a43b-9d975e11aa58/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 62342) - "WebSocket /api/verification/ca434497-c0e9-4d01-a43b-9d975e11aa58/stream" [accepted]
+INFO:     connection open
+INFO:     connection closed
