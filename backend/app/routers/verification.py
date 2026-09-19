@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 import uuid
@@ -8,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.acceptance_policy import evaluate_acceptance, infer_nationality, parse_dob
+from app.acceptance_policy import FAMILY_RELATIONSHIPS, evaluate_acceptance, evaluate_family_provision, infer_nationality, parse_dob
 from app.config import (
     STORAGE_DIR,
     DUPLICATE_WINDOW_HOURS,
@@ -28,10 +29,19 @@ from app.modules.validation import run_validation
 from app.modules.tampering import run_tampering
 from app.modules.face import embed_face, cosine_similarity, run_liveness, similarity_between_images
 from app.risk import compute_risk_score
-from app.schemas import StartVerificationRequest, DecisionRequest
+from app.schemas import StartVerificationRequest, DecisionRequest, FamilyMemberRequest
 from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/verification", tags=["verification"])
+
+
+async def _none():
+    return None
+
+
+# Document types whose issuing authority prints them in colour and for which
+# this crossing requires the original (see app/acceptance_policy.py).
+ORIGINAL_REQUIRED_DOC_TYPES = {"indian_passport", "foreign_passport", "voter_id"}
 logger = logging.getLogger("app.verification")
 
 
@@ -56,6 +66,51 @@ async def start_verification(body: StartVerificationRequest, db: AsyncSession = 
     db.add(record)
     await db.commit()
     return {"session_id": session_id}
+
+
+@router.post("/{session_id}/family")
+async def add_family_member(session_id: str, body: FamilyMemberRequest, db: AsyncSession = Depends(get_db)):
+    """Starts a new verification session linked to `session_id`'s group,
+    inheriting its direction and location (a family crosses together)."""
+    if body.relationship not in FAMILY_RELATIONSHIPS:
+        raise HTTPException(422, f"relationship must be one of {sorted(FAMILY_RELATIONSHIPS)}")
+    anchor = await _get_record(db, session_id)
+    if anchor.group_id is None:
+        anchor.group_id = anchor.session_id  # this traveller becomes the group's anchor
+    new_session = str(uuid.uuid4())
+    db.add(VerificationRecord(
+        session_id=new_session,
+        travel_direction=anchor.travel_direction,
+        latitude=anchor.latitude,
+        longitude=anchor.longitude,
+        group_id=anchor.group_id,
+        family_relationship=body.relationship,
+        relationship_proof_presented=body.relationship_proof_presented,
+    ))
+    await db.commit()
+    return {"session_id": new_session, "group_id": anchor.group_id}
+
+
+@router.get("/{session_id}/family")
+async def get_family(session_id: str, db: AsyncSession = Depends(get_db)):
+    record = await _get_record(db, session_id)
+    if record.group_id is None:
+        return {"group_id": None, "members": []}
+    result = await db.execute(
+        select(VerificationRecord).where(VerificationRecord.group_id == record.group_id).order_by(VerificationRecord.created_at)
+    )
+    return {
+        "group_id": record.group_id,
+        "members": [
+            {
+                "session_id": m.session_id, "name": m.name, "doc_type": m.doc_type,
+                "relationship": m.family_relationship, "document_accepted": m.document_accepted,
+                "risk_level": m.risk_level, "officer_decision": m.officer_decision,
+                "is_current": m.session_id == session_id,
+            }
+            for m in result.scalars().all()
+        ],
+    }
 
 
 @router.websocket("/{session_id}/stream")
@@ -239,6 +294,28 @@ async def upload_document(
     if acceptance["applies"]:
         record.document_accepted = acceptance["accepted"]
         record.document_acceptance_reason = acceptance["reason"]
+        if not acceptance["accepted"] and record.group_id and record.family_relationship:
+            group_result = await db.execute(
+                select(VerificationRecord).where(
+                    VerificationRecord.group_id == record.group_id,
+                    VerificationRecord.id != record.id,
+                    VerificationRecord.document_accepted.is_(True),
+                )
+            )
+            candidates = group_result.scalars().all()
+            # Prefer the group's anchor (relationship None); any accepted member otherwise.
+            anchor = next((a for a in candidates if a.family_relationship is None), None) or (candidates[0] if candidates else None)
+            family = evaluate_family_provision(
+                record.doc_type, record.family_relationship, record.relationship_proof_presented,
+                anchor.name if anchor else None, anchor.doc_type if anchor else None,
+            )
+            if family["accepted"]:
+                acceptance = {**acceptance, "accepted": True, "reason": None}
+                record.document_accepted = True
+                record.document_acceptance_reason = family["reason"]
+            else:
+                record.document_acceptance_reason = f"{acceptance['reason']} {family['reason']}"
+                acceptance = {**acceptance, "reason": record.document_acceptance_reason}
         if not acceptance["accepted"]:
             validation_result = {
                 **validation_result,
@@ -257,6 +334,29 @@ async def upload_document(
     else:
         record.document_accepted = None
         record.document_acceptance_reason = None
+
+    # Originals-only rule (India-Nepal: "any photocopy or digital/PDF copy of
+    # an otherwise valid document" is not accepted). The image alone can't
+    # prove copy-vs-original, but a monochrome/bi-level reproduction of a
+    # document that is issued in colour is a strong physical tell — raised as
+    # a validation failure for the officer to inspect the physical document,
+    # never as an automatic rejection (it is a heuristic; see
+    # ml-service/src/preprocessing/reproduction_check.py for what it can miss).
+    ml_quality_flags = ((analysis["ocr"].get("ml_detail") or {}).get("quality_flags")) or []
+    reproduction = [f for f in ml_quality_flags if f.endswith("_reproduction")]
+    if reproduction and record.doc_type in ORIGINAL_REQUIRED_DOC_TYPES:
+        reason = (
+            "The image looks like a monochrome photocopy/scan rather than the original "
+            f"({', '.join(r.replace('_', ' ') for r in reproduction)}). This crossing requires the original "
+            "document — inspect the physical document."
+        )
+        validation_result = {
+            **validation_result,
+            "passed": False,
+            "failures": [*validation_result["failures"], {"rule": "possible_photocopy", "reason": reason}],
+            "failure_count": validation_result["failure_count"] + 1,
+        }
+        await manager.emit(session_id, "validation", "error", f"⚠️ {reason}", {"possible_photocopy": True})
 
     record.validation_result_json = validation_result
 
@@ -286,6 +386,8 @@ async def upload_face(
 
     live_embedding: list[float] | None = None
     document_embedding: list[float] | None = None
+    ml_risk_assessment: dict | None = None
+    face_unavailable_reason: str | None = None
     face_embedding_source = "mock"
 
     if record.analysis_source == "ml_service":
@@ -299,28 +401,37 @@ async def upload_face(
             face_match_score, liveness_passed = adapt_face(ml_result["face_result"])
             await manager.emit(session_id, "face", "progress", f"Liveness check: {'passed' if liveness_passed else 'FAILED' if liveness_passed is False else 'unavailable'}.")
 
-            live_embedding = await ml_client.embed_face(live_face_bytes, file.filename or "live.jpg")
-            # Watchlist screening must also catch a watchlisted person's own
-            # document photo (genuine or forged) — see model comment on
-            # document_face_embedding — so this is computed here too, not
-            # just the live capture. document_bytes is the whole scanned
-            # page, not a pre-cropped face, but /embed runs its own face
-            # detector over the full image and simply finds nothing (None)
-            # on a document type with no photo — never raises.
-            if document_bytes:
-                document_embedding = await ml_client.embed_face(document_bytes, "document.jpg")
+            # Both embeds are independent ML calls; run them together (the
+            # document one is skipped when there is no document image).
+            live_embedding, document_embedding = await asyncio.gather(
+                ml_client.embed_face(live_face_bytes, file.filename or "live.jpg"),
+                ml_client.embed_face(document_bytes, "document.jpg") if document_bytes else _none(),
+            )
             face_embedding_source = "ml_service"
 
-            gate = (ml_result.get("risk_assessment") or {}).get("gate_triggered")
+            ml_risk_assessment = ml_result.get("risk_assessment")
+            gate = (ml_risk_assessment or {}).get("gate_triggered")
             if gate:
                 await manager.emit(session_id, "face", "progress", f"ML service hard gate: {gate}.")
-        except ml_client.MLServiceUnavailableError:
-            await manager.emit(session_id, "face", "progress", "ML service unavailable — falling back to mock face analysis.")
-            liveness_passed = run_liveness(live_face_bytes)
-            face_match_score = similarity_between_images(document_bytes, live_face_bytes, force_match=not simulate_mismatch)
-            live_embedding = embed_face(live_face_bytes)
-            document_embedding = embed_face(document_bytes) if document_bytes else None
-            face_embedding_source = "mock"
+        except ml_client.MLServiceUnavailableError as exc:
+            # FAIL CLOSED. This record's document was analysed by the real
+            # ML service, so switching to mock face analysis here would mix
+            # fabricated numbers (a random-looking 94-97% "match", a passing
+            # liveness check) into a real record — and did, silently, for
+            # every face request that timed out. The face result is left
+            # absent and flagged so an officer completes it manually.
+            logger.warning("ml-service face step failed (session=%s): %s", session_id, exc)
+            face_unavailable_reason = str(exc)[:400]
+            face_match_score = None
+            liveness_passed = None
+            live_embedding = None
+            document_embedding = None
+            ml_risk_assessment = None
+            face_embedding_source = "unavailable"
+            await manager.emit(
+                session_id, "face", "error",
+                "Face verification could not be completed by the ML service — no match was computed. Manual review required.",
+            )
     else:
         liveness_passed = run_liveness(live_face_bytes)
         await manager.emit(session_id, "face", "progress", f"Liveness check: {'passed' if liveness_passed else 'FAILED'}.")
@@ -336,6 +447,8 @@ async def upload_face(
     record.liveness_passed = liveness_passed
     record.live_face_embedding = live_embedding
     record.document_face_embedding = document_embedding
+    record.face_unavailable_reason = face_unavailable_reason
+    record.ml_risk_json = ml_risk_assessment
     record.face_embedding_source = face_embedding_source
 
     watchlist_threshold = ML_WATCHLIST_MATCH_THRESHOLD if face_embedding_source == "ml_service" else MOCK_WATCHLIST_MATCH_THRESHOLD
@@ -462,6 +575,7 @@ async def upload_face(
         document_not_accepted_reason=record.document_acceptance_reason,
         liveness_passed=record.liveness_passed,
         watchlist_match_source=record.watchlist_match_source,
+        face_check_incomplete=record.face_embedding_source == "unavailable",
     )
     record.risk_score = risk["risk_score"]
     record.risk_level = risk["risk_level"]
@@ -522,6 +636,53 @@ async def decide(session_id: str, body: DecisionRequest, db: AsyncSession = Depe
     return _serialize(record)
 
 
+_ML_TIER_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 2}
+_LEVEL_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def _model_crosscheck(record: VerificationRecord) -> dict | None:
+    """The ML fusion model's independent assessment next to the displayed
+    score. `agrees` is False only for a real disagreement in risk band — a
+    one-band difference near a boundary is normal between two differently
+    built scorers, so only a gap that flips the officer's likely action
+    (low vs high) is flagged."""
+    ml = record.ml_risk_json
+    if not ml:
+        return None
+    ml_rank = _ML_TIER_RANK.get(ml.get("risk_tier"))
+    shown_rank = _LEVEL_RANK.get(record.risk_level)
+    agrees = None if ml_rank is None or shown_rank is None else abs(ml_rank - shown_rank) < 2
+
+    # The fusion model takes the learned forgery classifier's probability as an
+    # input, and that classifier's head is untrained (its output is documented
+    # as not meaningful). If that input is among the model's strongest drivers
+    # the "second opinion" is partly an echo of an untrained component, so it
+    # is labelled informational and never raised as a disagreement — presenting
+    # it as independent validation would overstate what it is.
+    factors = ml.get("top_contributing_factors") or []
+    classifier_calibrated = bool((record.tampering_result_json or {}).get("forgery_classifier_calibrated"))
+    leans_on_untrained = (not classifier_calibrated) and any(
+        f.get("feature") == "forgery_classifier_probability" for f in factors[:2]
+    )
+    if leans_on_untrained:
+        agrees = None
+    return {
+        "tier": ml.get("risk_tier"),
+        "score": ml.get("risk_score"),
+        "probability": ml.get("model_probability"),
+        "gate_triggered": ml.get("gate_triggered"),
+        "top_factors": ml.get("top_contributing_factors") or [],
+        "model_version": ml.get("model_version"),
+        "agrees_with_displayed_score": agrees,
+        "informational_only": leans_on_untrained,
+        "note": (
+            "Informational only: this model's strongest input is a forgery classifier whose head is untrained, "
+            "so it is not an independent validation of the score above."
+            if leans_on_untrained else None
+        ),
+    }
+
+
 def _serialize(record: VerificationRecord) -> dict:
     return {
         "id": record.id,
@@ -548,6 +709,12 @@ def _serialize(record: VerificationRecord) -> dict:
         "watchlist_match": record.watchlist_match,
         "watchlist_match_ref": record.watchlist_match_ref,
         "watchlist_match_source": record.watchlist_match_source,
+        "face_check_incomplete": record.face_embedding_source == "unavailable",
+        "face_unavailable_reason": record.face_unavailable_reason,
+        "watchlist_checked": record.face_embedding_source != "unavailable",
+        "group_id": record.group_id,
+        "family_relationship": record.family_relationship,
+        "model_crosscheck": _model_crosscheck(record),
         "latitude": record.latitude,
         "longitude": record.longitude,
         "travel_direction": record.travel_direction,

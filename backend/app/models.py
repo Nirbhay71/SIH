@@ -65,10 +65,30 @@ class VerificationRecord(Base):
     # ML_*/MOCK_* threshold split; comparisons across mismatched sources are
     # skipped rather than scored under the wrong threshold.
     face_embedding_source: Mapped[str] = mapped_column(String, default="mock")
+    # Set when the face step could not be completed by the ML service. The
+    # record then carries NO face result at all (None, not a mock number):
+    # a fabricated "94% match" on a border record is worse than an honest gap.
+    face_unavailable_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # ml-service's own fusion-model assessment (tier, probability, SHAP-style
+    # top factors, any hard gate). Deliberately NOT the score shown to the
+    # officer — risk_score/risk_level below stay the single authoritative
+    # number (app/risk.py). This is stored as an independent second opinion
+    # so the two can be compared and a disagreement surfaced, instead of the
+    # model's output being computed and silently thrown away.
+    ml_risk_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     watchlist_match: Mapped[bool] = mapped_column(Boolean, default=False)
     watchlist_match_source: Mapped[str | None] = mapped_column(String, nullable=True)
     watchlist_match_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Family/group travel (India-Nepal "families traveling together" rule).
+    # group_id is server-issued only: a client can never invent or guess one
+    # to attach itself to someone else's group. The first traveller in a
+    # group (the anchor) has family_relationship None.
+    group_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    family_relationship: Mapped[str | None] = mapped_column(String, nullable=True)
+    relationship_proof_presented: Mapped[bool] = mapped_column(Boolean, default=False)
 
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)

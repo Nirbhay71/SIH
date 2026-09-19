@@ -41,6 +41,7 @@ if os.name == "nt" and os.path.isdir(_TESSERACT_WIN_DIR) and _TESSERACT_WIN_DIR 
 
 from fastapi import FastAPI
 
+from api import warmup
 from api.routes import router
 
 logging.basicConfig(level=os.getenv("ML_SERVICE_LOG_LEVEL", "INFO"))
@@ -55,6 +56,21 @@ app = FastAPI(
 app.include_router(router)
 
 
+@app.on_event("startup")
+async def _warm_models():
+    if os.getenv("ML_SERVICE_WARMUP", "true").lower() == "true":
+        warmup.start_in_background()
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/ready")
+async def ready():
+    """"Up" is not "warm": the service answers /health immediately but its first
+    real request is slow until the models load. `ready` is true only when the
+    warm-up finished (or was disabled)."""
+    finished = warmup.STATE["finished"] or os.getenv("ML_SERVICE_WARMUP", "true").lower() != "true"
+    return {"ready": bool(finished), **{k: v for k, v in warmup.STATE.items() if k != "started"}}

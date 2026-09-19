@@ -1,9 +1,134 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { getResult, submitDecision } from "../lib/api";
+import { addFamilyMember, getFamily, getResult, submitDecision } from "../lib/api";
 import VerifyShell from "../components/VerifyShell.jsx";
 import { ThinkingLoader, Spinner } from "../components/Loader.jsx";
+
+const RELATIONSHIPS = [
+  ["spouse", "Spouse"], ["child", "Child"], ["parent", "Parent"], ["sibling", "Sibling"], ["other_relative", "Other relative"],
+];
+
+/* India-Nepal "families traveling together": one adult with an approved
+   document can cover family members who carry lesser identity proof, if the
+   relationship is declared and its proof presented. The officer attests the
+   proof here; the server issues the group id, never the browser. */
+function FamilyPanel({ sessionId, result }) {
+  const navigate = useNavigate();
+  const [family, setFamily] = useState({ group_id: null, members: [] });
+  const [open, setOpen] = useState(false);
+  const [relationship, setRelationship] = useState("child");
+  const [proof, setProof] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    getFamily(sessionId).then(setFamily).catch(() => {});
+  }, [sessionId, result.officer_decision]);
+
+  async function start() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const { session_id } = await addFamilyMember(sessionId, { relationship, relationship_proof_presented: proof });
+      navigate(`/verify/capture/${session_id}`);
+    } catch (e) {
+      setErr(e.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Family / group travel</h2>
+      {family.members.length > 0 && (
+        <ul className="family-list">
+          {family.members.map((m) => (
+            <li key={m.session_id} className={m.is_current ? "is-current" : ""}>
+              <span>
+                <strong>{m.name || "Unnamed traveller"}</strong>{" "}
+                <span className="mini">
+                  {m.relationship ? m.relationship.replace("_", " ") : "group anchor"}
+                  {m.doc_type ? ` · ${m.doc_type.replace(/_/g, " ")}` : ""}
+                </span>
+              </span>
+              {m.is_current ? <span className="mini">this record</span> : <Link to={`/verify/result/${m.session_id}`}>view</Link>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {result.family_relationship && (
+        <p className="mini">
+          This traveller was added as a <strong>{result.family_relationship.replace("_", " ")}</strong> of the group's anchor.
+        </p>
+      )}
+      {!open ? (
+        <button className="btn btn-outline" onClick={() => setOpen(true)}>+ Add a family member to this group</button>
+      ) : (
+        <div className="family-form">
+          <label>Relationship to the traveller above</label>
+          <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+            {RELATIONSHIPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <div className="toggle-row">
+            <input type="checkbox" id="rel-proof" checked={proof} onChange={(e) => setProof(e.target.checked)} />
+            <label htmlFor="rel-proof" style={{ margin: 0 }}>I have seen proof of this family relationship</label>
+          </div>
+          <p className="mini">
+            The family provision only applies if the group's anchor carries an approved document (passport, original Voter ID,
+            or embassy certificate) and this member has a recognised photo ID.
+          </p>
+          {err && <p className="verify-error">{err}</p>}
+          <div className="action-row">
+            <button className="btn btn-primary" disabled={busy} onClick={start}>{busy ? "Starting…" : "Continue to document capture"}</button>
+            <button className="btn btn-outline" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* The ML fusion model's own verdict, shown beside (never instead of) the
+   authoritative weighted score. Two independently built scorers agreeing is
+   reassurance; disagreeing by a full band is exactly the case an officer
+   should look at manually, so it is called out rather than left to be
+   noticed. */
+function ModelCrosscheck({ data }) {
+  if (!data) return null;
+  const factors = (data.top_factors || []).slice(0, 4);
+  const disagree = data.agrees_with_displayed_score === false;
+  return (
+    <div className={`crosscheck ${disagree ? "is-disagree" : ""} ${data.informational_only ? "is-informational" : ""}`}>
+      <div className="crosscheck-head">
+        <strong>Independent model cross-check</strong>
+        <span className={`badge ${data.tier === "LOW" ? "badge-low" : data.tier === "MEDIUM" ? "badge-medium" : "badge-high"}`}>
+          {data.tier}
+        </span>
+      </div>
+      <p className="mini">
+        A separately trained gradient-boosted model scored this case {data.score}/100
+        {data.probability != null ? ` (p=${Number(data.probability).toFixed(2)})` : ""}
+        {data.gate_triggered ? `, hard gate: ${data.gate_triggered}` : ""}.{" "}
+        {data.informational_only
+          ? data.note
+          : disagree
+            ? "It disagrees materially with the score above — review this case manually."
+            : "It is consistent with the score above."}
+      </p>
+      {factors.length > 0 && (
+        <ul className="crosscheck-factors">
+          {factors.map((f, i) => (
+            <li key={i}>
+              <span>{f.display_name}</span>
+              <span className="mini">{f.contribution >= 0 ? "+" : ""}{Number(f.contribution).toFixed(2)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function riskBadgeClass(level) {
   if (level === "low") return "badge-low";
@@ -125,6 +250,20 @@ export default function Result() {
 
   return (
     <VerifyShell current="result" status={status}>
+      {result.face_check_incomplete && (
+        <div className="card" style={{ background: "#fffbeb", border: "2px solid var(--yellow)" }}>
+          <h2 style={{ color: "var(--yellow)" }}>⚠️ Face verification not completed</h2>
+          <p>
+            The ML service could not finish the face step, so <strong>no face match, liveness result or watchlist check was
+            produced</strong> for this traveller — nothing has been substituted or estimated. Risk is held at MEDIUM or above until
+            an officer verifies the face manually. Retry the face capture once the ML service is ready.
+          </p>
+          {result.face_unavailable_reason && <p className="mini">Technical reason: {result.face_unavailable_reason}</p>}
+          <div className="action-row">
+            <Link className="btn btn-primary" to={`/verify/face/${sessionId}`}>Retry face verification</Link>
+          </div>
+        </div>
+      )}
       {result.analysis_source === "mock" && (
         <div className="card" style={{ background: "#fffbeb", border: "2px solid var(--yellow)" }}>
           <h2 style={{ color: "var(--yellow)" }}>{t("result.mockTitle")}</h2>
@@ -190,10 +329,12 @@ export default function Result() {
 
             <h2 style={{ fontSize: 15, marginTop: 16 }}>{t("result.faceVerification")}</h2>
             <p>{t("result.match")}: {result.face_match_score != null ? `${(result.face_match_score * 100).toFixed(1)}%` : "—"}</p>
-            <p>{t("result.liveness")}: {result.liveness_passed ? t("result.passed") : t("result.failed")}</p>
+            <p>{t("result.liveness")}: {result.liveness_passed === true ? t("result.passed") : result.liveness_passed === false ? t("result.failed") : "Not assessed"}</p>
             <p>
               {t("result.watchlist")}:{" "}
-              {result.watchlist_match ? (
+              {result.watchlist_checked === false ? (
+                <span className="mini">Not checked — face verification was not completed</span>
+              ) : result.watchlist_match ? (
                 <strong style={{ color: "var(--red)" }}>
                   {t("result.watchlistMatch")} {result.watchlist_match_ref}
                   {result.watchlist_match_source && (
@@ -219,6 +360,7 @@ export default function Result() {
           <div className="mini">/ 100 — {result.risk_level?.toUpperCase()}</div>
         </div>
         <RiskCalculation breakdown={result.risk_breakdown_json} score={result.risk_score} t={t} />
+        <ModelCrosscheck data={result.model_crosscheck} />
       </div>
 
       <div className="card">
@@ -240,6 +382,8 @@ export default function Result() {
           <p>{t("result.noPriorRecord")}</p>
         )}
       </div>
+
+      <FamilyPanel sessionId={sessionId} result={result} />
 
       <div className="card">
         <h2>{t("result.officerDecision")}</h2>

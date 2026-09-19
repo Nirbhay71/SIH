@@ -7,6 +7,39 @@ know whether a given record was scored by the mocks or the real service.
 """
 
 
+from datetime import datetime
+
+
+def _format_mrz_date(raw: str, *, is_expiry: bool) -> str:
+    """MRZ dates are YYMMDD with no century. Shown as DD/MM/YYYY, because
+    "711204" reads as nonsense to an officer and "date of birth 270830" looks
+    like an extraction error.
+
+    Century: an expiry date is always this century (passports are valid for at
+    most ~10 years). A date of birth is this century only if that would not
+    put the holder in the future — otherwise last century (ICAO 9303 leaves
+    this to the reader; this is the standard rule). Unparseable input is
+    returned as read, never guessed at."""
+    if not (len(raw) == 6 and raw.isascii() and raw.isdigit()):
+        return raw
+    yy, mm, dd = int(raw[0:2]), int(raw[2:4]), int(raw[4:6])
+    year = 2000 + yy if (is_expiry or yy <= datetime.now().year % 100) else 1900 + yy
+    try:
+        datetime(year, mm, dd)
+    except ValueError:
+        return raw
+    return f"{dd:02d}/{mm:02d}/{year}"
+
+
+def _display_fields(fields: dict) -> dict:
+    out = {}
+    for key, fe in fields.items():
+        if key in ("date_of_birth", "expiry_date") and isinstance(fe, dict) and isinstance(fe.get("value"), str):
+            fe = {**fe, "value": _format_mrz_date(fe["value"], is_expiry=key == "expiry_date")}
+        out[key] = fe
+    return out
+
+
 def adapt_ocr(ml_ocr: dict) -> dict:
     """ml_ocr is an OCRResult.model_dump() from ml-service. Its `fields`
     dict is already {key: {value, confidence, bbox}} — the same shape
@@ -15,7 +48,7 @@ def adapt_ocr(ml_ocr: dict) -> dict:
     match the mock's `doc_type`/`low_confidence_fields` keys."""
     return {
         "doc_type": ml_ocr.get("document_type"),
-        "fields": ml_ocr.get("fields", {}),
+        "fields": _display_fields(ml_ocr.get("fields", {})),
         "low_confidence_fields": ml_ocr.get("low_confidence_fields", []),
         "ml_detail": ml_ocr,
     }
@@ -54,31 +87,41 @@ def adapt_validation(ml_validation: dict) -> dict:
 
 
 def adapt_tampering(ml_tampering: dict) -> float:
-    """Collapses ml-service's several tampering sub-scores (photo splice,
-    text-manipulation, stamp forgery, the learned forgery-classifier
-    probability) into the single 0..1 scalar app/risk.py and the frontend's
-    tampering-score display expect. Uses the max across whichever
-    sub-checks actually ran (some are None when their optional dependency —
-    e.g. a stamp reference library — isn't available) rather than an
-    average, so one strongly-flagged sub-check isn't diluted by others that
-    found nothing.
+    """Collapses ml-service's tampering output into the single 0..1 scalar
+    app/risk.py and the frontend display expect — using ONLY evidence-grade
+    signals.
 
-    forgery_classifier_probability is excluded unless
-    forgery_classifier_calibrated is True: until ml-service's fine-tuned
-    head is trained, that probability comes from an untrained model head
-    and is explicitly documented (src/tampering/forgery_classifier.py) as
-    not meaningful — including it here would let noise silently drive the
-    displayed tampering score and the risk calculation built on it."""
-    candidates = [
-        ml_tampering.get("photo_tamper_score"),
-        ml_tampering.get("text_manipulation_score_max"),
-        ml_tampering.get("stamp_forgery_score"),
-    ]
-    if ml_tampering.get("forgery_classifier_calibrated"):
-        candidates.append(ml_tampering.get("forgery_classifier_probability"))
+    Measured, not assumed (ml-service/evaluation/tampering_realdoc.py): the
+    visual heuristics (photo_tamper_score, text_manipulation_score_max) scored
+    the untouched real originals and every forgery built from them
+    identically (~0.85-0.9 on both), i.e. they respond to the document, not to
+    an edit. Feeding them into the risk score made every real document look
+    moderately tampered and told an officer nothing. They are still returned
+    by ml-service and stored in tampering_result_json for inspection; they
+    are just not scored.
 
-    present = [c for c in candidates if c is not None]
-    return max(present) if present else 0.0
+    Scored: metadata forensics (an explicit editing-software tag, or a
+    modified-after-capture timestamp), and the learned forgery classifier
+    only if its head is trained (forgery_classifier_calibrated) — and a
+    stamp-forensics result when a reference library exists. Absence of a
+    metadata flag proves nothing (metadata is trivially stripped), so a
+    clean result here means "no tampering evidence found", not "verified
+    genuine" — the UI says so."""
+    candidates: list[float] = []
+
+    flag_count = ml_tampering.get("metadata_flag_count") or 0
+    if flag_count:
+        # One explicit editor tag is strong evidence; two independent flags
+        # are stronger. Bounded well below 1.0: metadata alone is trivially
+        # forged, so it shouldn't single-handedly max the factor.
+        candidates.append(min(0.6 + 0.25 * (flag_count - 1), 0.9))
+
+    if ml_tampering.get("stamp_forgery_score") is not None:
+        candidates.append(ml_tampering["stamp_forgery_score"])
+    if ml_tampering.get("forgery_classifier_calibrated") and ml_tampering.get("forgery_classifier_probability") is not None:
+        candidates.append(ml_tampering["forgery_classifier_probability"])
+
+    return max(candidates) if candidates else 0.0
 
 
 _LIVENESS_STATUS_TO_PASSED = {"passed": True, "failed": False, "not_applicable": None}

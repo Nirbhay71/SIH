@@ -1,0 +1,17 @@
+# TLS termination for the whole stack. Caddy obtains and renews certificates
+# automatically for a public hostname; for an internal host, replace the
+# site address with `tls internal`. Serve the built frontend (npm run build)
+# and reverse-proxy the API, so the browser only ever talks HTTPS.
+screening.example.gov.in {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle {
+		root * ../frontend/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

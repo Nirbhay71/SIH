@@ -10,7 +10,7 @@ from datetime import datetime
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-KNOWN_EDITING_SOFTWARE = ["photoshop", "gimp", "paint.net", "affinity photo", "pixlr"]
+KNOWN_EDITING_SOFTWARE = ["photoshop", "gimp", "paint.net", "affinity photo", "pixlr", "canva", "snapseed", "picsart", "coreldraw", "lightroom"]
 
 
 def extract_exif(raw_bytes: bytes) -> dict[str, str]:

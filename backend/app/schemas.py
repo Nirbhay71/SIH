@@ -14,3 +14,8 @@ class DecisionRequest(BaseModel):
 class WatchlistCreateResponse(BaseModel):
     id: str
     reference_label: str
+
+
+class FamilyMemberRequest(BaseModel):
+    relationship: str  # spouse / child / parent / sibling / other_relative
+    relationship_proof_presented: bool = False

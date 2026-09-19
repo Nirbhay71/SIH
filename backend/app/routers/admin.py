@@ -3,13 +3,14 @@ login via HTTP Basic — intentionally minimal per Part J (no production-grade
 auth for a 1-day build)."""
 import secrets
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ADMIN_USERNAME, ADMIN_PASSWORD, STORAGE_DIR
 from app.database import get_db
+from app.security import rate_limit
 from app import ml_client
 from app.models import WatchlistFace
 from app.modules.face import embed_face
@@ -18,9 +19,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 security = HTTPBasic()
 
 
-def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_user = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
-    correct_pass = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
+def require_admin(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
+    rate_limit(request)
+    correct_user = secrets.compare_digest(credentials.username.encode(), ADMIN_USERNAME.encode())
+    correct_pass = secrets.compare_digest(credentials.password.encode(), ADMIN_PASSWORD.encode())
     if not (correct_user and correct_pass):
         raise HTTPException(401, "Invalid admin credentials", headers={"WWW-Authenticate": "Basic"})
     return credentials.username

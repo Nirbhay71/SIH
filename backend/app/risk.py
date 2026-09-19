@@ -92,6 +92,7 @@ def compute_risk_score(
     document_not_accepted_reason: str | None = None,
     liveness_passed: bool | None = None,
     watchlist_match_source: str | None = None,
+    face_check_incomplete: bool = False,
 ) -> dict:
     # --- Hard gates first — short-circuit the weighted model entirely ---
     if watchlist_match:
@@ -139,7 +140,15 @@ def compute_risk_score(
     validation_severity = _clamp01(validation_failure_count / VALIDATION_FAILURE_SEVERITY_CAP)
 
     factors = [
-        ("Tampering", WEIGHT_TAMPERING, tampering_severity, f"Tampering score {tampering_score:.2f}."),
+        (
+            "Tampering",
+            WEIGHT_TAMPERING,
+            tampering_severity,
+            f"Tampering evidence score {tampering_score:.2f}."
+            if tampering_score > 0
+            else "No tampering evidence found by the scored checks (metadata, trained classifier). "
+            "This is absence of evidence, not proof of authenticity — visual heuristics are experimental and not scored.",
+        ),
         ("Face mismatch", WEIGHT_FACE_MISMATCH, face_severity, face_detail),
         (
             "Liveness check failed",
@@ -194,6 +203,23 @@ def compute_risk_score(
     # [0, 100] already. Rounding only at the very end avoids compounding
     # rounding error across factors.
     score = round(total)
+
+    # A crossing whose face check never ran must not come out LOW just because
+    # the missing factor contributed zero points: absence of a check is not a
+    # pass. Floor at the bottom of MEDIUM and say why, so the officer completes
+    # the check by hand.
+    if face_check_incomplete:
+        breakdown.append({
+            "factor": "Face verification incomplete",
+            "points": 0,
+            "weight": 0,
+            "severity": 1.0,
+            "hard_gate": False,
+            "reason": "The ML service could not complete face verification, so face match, liveness and the "
+                      "watchlist check did not run. Risk is floored at MEDIUM until an officer verifies the face manually.",
+        })
+        score = max(score, 31)
+
     if score <= 30:
         level = "low"
     elif score <= 65:

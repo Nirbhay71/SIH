@@ -2,13 +2,10 @@
 > border-screening-frontend@0.1.0 dev
 > vite
 
-Re-optimizing dependencies because lockfile has changed
 
-  VITE v5.4.21  ready in 734 ms
+  VITE v5.4.21  ready in 871 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-8:16:26 am [vite] ✨ new dependencies optimized: framer-motion
-8:16:26 am [vite] ✨ optimized dependencies changed. reloading
-8:21:56 am [vite] hmr update /src/styles.css
-8:21:56 am [vite] hmr update /src/App.jsx
+9:47:31 pm [vite] hmr update /src/pages/Result.jsx
+9:59:02 pm [vite] hmr update /src/pages/Result.jsx

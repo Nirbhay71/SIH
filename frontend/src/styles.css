@@ -1114,3 +1114,27 @@ table.field-table th { color: var(--muted); font-size: 12px; text-transform: upp
   .risk-calc-row { grid-template-columns: 1fr 64px; }
   .risk-calc-bar-cell { grid-column: 1 / -1; }
 }
+
+/* ---------- Independent model cross-check ---------- */
+.crosscheck {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: #fafaf5;
+}
+.crosscheck.is-disagree { border-color: #fecaca; background: #fef2f2; }
+.crosscheck-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.crosscheck p { margin: 0 0 8px; line-height: 1.5; }
+.crosscheck-factors { list-style: none; padding: 0; margin: 0; }
+.crosscheck-factors li { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-top: 1px solid var(--border); }
+
+/* ---------- Family / group travel ---------- */
+.family-list { list-style: none; padding: 0; margin: 0 0 14px; }
+.family-list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; font-size: 14px;
+}
+.family-list li.is-current { background: #f7f8ee; border-color: var(--gradient-a); }
+.family-form { border-top: 1px solid var(--border); padding-top: 14px; }
+.crosscheck.is-informational { opacity: 0.8; background: #f3f3ee; }

@@ -15,6 +15,7 @@ Input is the ordered {line_0: ..., line_1: ...} dict built in pipeline.py,
 in reading order — order matters, since a label and its value are often on
 adjacent lines rather than the same one.
 """
+import difflib
 import re
 from datetime import date
 
@@ -48,6 +49,11 @@ _FEMALE_RE = re.compile(r"(female|महिला|स्त्री|સ્ત�
 
 # Aadhaar: 12 digits, conventionally printed in three 4-digit groups.
 _AADHAAR_RE = re.compile(r"\b([0-9]{4}\s?[0-9]{4}\s?[0-9]{4})\b")
+# PAN: five letters, four digits, one letter (4th letter encodes holder type).
+_PAN_RE = re.compile(r"\b([A-Z]{5}[0-9]{4}[A-Z])\b")
+# Driving licence: state code, RTO code, year of issue, 7-digit serial
+# ("MH12 20110012345", "DL-0420110149646").
+_DL_RE = re.compile(r"\b([A-Z]{2}[ -]?[0-9]{2}[ -]?(?:19|20)[0-9]{2}[0-9]{7})\b")
 # Voter ID (EPIC): three letters then seven digits.
 _EPIC_RE = re.compile(r"\b([A-Z]{3}[0-9]{7})\b")
 # A VID is 16 digits and sits right next to the Aadhaar number on the card —
@@ -65,6 +71,31 @@ _NAME_BLOCKLIST_RE = re.compile(
     r"date\s+of\s+issue|issued|details\s+as\s+on|vid|dob|mobile)",
     re.IGNORECASE,
 )
+
+
+# Verhoeff check-digit tables (the algorithm UIDAI uses for the last digit of
+# every Aadhaar number). Unlike a format regex this detects any single-digit
+# misread and nearly all adjacent transpositions — exactly the errors OCR makes.
+_VERHOEFF_D = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9), (1, 2, 3, 4, 0, 6, 7, 8, 9, 5), (2, 3, 4, 0, 1, 7, 8, 9, 5, 6),
+    (3, 4, 0, 1, 2, 8, 9, 5, 6, 7), (4, 0, 1, 2, 3, 9, 5, 6, 7, 8), (5, 9, 8, 7, 6, 0, 4, 3, 2, 1),
+    (6, 5, 9, 8, 7, 1, 0, 4, 3, 2), (7, 6, 5, 9, 8, 2, 1, 0, 4, 3), (8, 7, 6, 5, 9, 3, 2, 1, 0, 4),
+    (9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
+)
+_VERHOEFF_P = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9), (1, 5, 7, 6, 2, 8, 3, 0, 9, 4), (5, 8, 0, 3, 7, 9, 6, 1, 4, 2),
+    (8, 9, 1, 6, 0, 4, 3, 5, 2, 7), (9, 4, 5, 3, 1, 2, 6, 8, 7, 0), (4, 2, 8, 6, 5, 7, 3, 9, 0, 1),
+    (2, 7, 9, 3, 8, 0, 6, 4, 1, 5), (7, 0, 4, 6, 9, 1, 3, 2, 5, 8),
+)
+
+
+def aadhaar_checksum_valid(number: str) -> bool:
+    if not (len(number) == 12 and number.isascii() and number.isdigit()):
+        return False
+    c = 0
+    for i, ch in enumerate(reversed(number)):
+        c = _VERHOEFF_D[c][_VERHOEFF_P[i % 8][int(ch)]]
+    return c == 0
 
 
 def _line_items(text_fields: dict[str, FieldExtraction]) -> list[tuple[str, FieldExtraction]]:
@@ -114,6 +145,37 @@ def _repair_date_digits(digits: str) -> str | None:
     return None
 
 
+# Printed labels/boilerplate whose *misreads* ("Moblle No", "Aschssr do") look
+# exactly like a two-word name. Exact-match blocklisting can't catch a garbled
+# copy of a label, so candidates are also compared to these by similarity.
+_LABEL_WORDS = (
+    "mobile", "aadhaar", "issued", "government", "address", "male", "female",
+    "authority", "identification", "unique", "details", "enrolment", "download", "help",
+)
+
+
+def _looks_like_label(word: str) -> bool:
+    w = word.lower()
+    return any(difflib.SequenceMatcher(None, w, label).ratio() >= 0.8 for label in _LABEL_WORDS)
+
+
+_CONFUSABLE_TO_DIGIT = str.maketrans("OoIl|", "00111")
+
+
+def _digits_confusables(text: str) -> str:
+    """OCR reads 0 as O and 1 as l/I/| inside numbers. Repaired only within
+    date-shaped tokens and long digit-dominated runs, so ordinary words that
+    happen to contain 'O' or 'l' are never touched."""
+    def fix(m: re.Match) -> str:
+        return m.group(0).translate(_CONFUSABLE_TO_DIGIT)
+
+    text = re.sub(
+        r"[0-9OoIl|]{1,2}\s*[/\-.]\s*[0-9OoIl|]{1,2}\s*[/\-.]\s*[0-9OoIl|]{2,4}", fix, text
+    )
+    # A separator-less run must be mostly real digits before it is trusted.
+    return re.sub(r"(?<![A-Za-z])(?=[0-9OoIl|]*[0-9]{5})[0-9OoIl|]{8,10}(?![A-Za-z])", fix, text)
+
+
 _NAME_MIN_WORDS = 2
 _NAME_MIN_WORD_LEN = 2
 
@@ -133,7 +195,16 @@ def _longest_name_run(text: str) -> str | None:
     current: list[str] = []
     for token in re.split(r"\s+", text):
         stripped = token.strip(".,:;|/\\()[]")
-        is_word = len(stripped) >= _NAME_MIN_WORD_LEN and all(c.isalpha() for c in stripped)
+        # A trailing OCR artefact ("Niravbha!") shouldn't discard an otherwise
+        # clean word — but only long words get that tolerance, so short noise
+        # tokens are still rejected.
+        if len(stripped) >= 5 and stripped[-1] in "!?|1" and stripped[:-1].isalpha():
+            stripped = stripped[:-1]
+        is_word = (
+            len(stripped) >= _NAME_MIN_WORD_LEN
+            and all(c.isalpha() for c in stripped)
+            and not _looks_like_label(stripped)
+        )
         if is_word:
             current.append(stripped)
             if len(current) > len(best):
@@ -145,6 +216,7 @@ def _longest_name_run(text: str) -> str | None:
 
 
 def _find_date_in(text: str) -> str | None:
+    text = _digits_confusables(text)
     """First plausible date in `text`, trying properly-separated dates before
     falling back to repairing bare digit runs.
 
@@ -240,20 +312,29 @@ def extract_semantic_fields(text_fields: dict[str, FieldExtraction]) -> dict[str
 
         # --- Document number (Aadhaar 12-digit / EPIC) ---
         if "document_number" not in semantic and not _VID_LINE_RE.search(text):
-            epic = _EPIC_RE.search(text.replace(" ", ""))
-            if epic:
-                semantic["document_number"] = FieldExtraction(
-                    value=epic.group(1), confidence=fe.confidence * _CONFIDENCE_PENALTY
-                )
-                consumed.add(key)
+            for pattern, squash in ((_PAN_RE, False), (_DL_RE, False), (_EPIC_RE, True)):
+                hit = pattern.search(text.replace(" ", "") if squash else text)
+                if hit:
+                    semantic["document_number"] = FieldExtraction(
+                        value=re.sub(r"[ -]", "", hit.group(1)), confidence=fe.confidence * _CONFIDENCE_PENALTY
+                    )
+                    consumed.add(key)
+                    break
+            if "document_number" in semantic:
                 continue
-            aadhaar = _AADHAAR_RE.search(text)
-            if aadhaar:
+            for aadhaar in _AADHAAR_RE.finditer(text):
+                digits = re.sub(r"\s+", "", aadhaar.group(1))
+                # A 12-digit run that fails the check digit is a misread (or
+                # not an Aadhaar number at all) — dropped rather than stored,
+                # since a wrong ID on a border record is worse than none.
+                if not aadhaar_checksum_valid(digits):
+                    continue
                 semantic["document_number"] = FieldExtraction(
-                    value=re.sub(r"\s+", "", aadhaar.group(1)),
-                    confidence=fe.confidence * _CONFIDENCE_PENALTY,
+                    value=digits, confidence=fe.confidence * _CONFIDENCE_PENALTY
                 )
                 consumed.add(key)
+                break
+            if "document_number" in semantic:
                 continue
 
     # --- Name: the strongest run of consecutive alphabetic words on any

@@ -91,3 +91,17 @@ export function openPipelineSocket(sessionId) {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return new WebSocket(`${proto}://${window.location.host}/api/verification/${sessionId}/stream`);
 }
+
+export async function addFamilyMember(sessionId, { relationship, relationship_proof_presented }) {
+  const res = await fetch(`${BASE}/verification/${sessionId}/family`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ relationship, relationship_proof_presented }),
+  });
+  return handle(res);
+}
+
+export async function getFamily(sessionId) {
+  const res = await fetch(`${BASE}/verification/${sessionId}/family`);
+  return handle(res);
+}

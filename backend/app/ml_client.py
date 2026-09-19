@@ -1,14 +1,23 @@
 """Thin async client for the real ml-service (../ml-service). Every function
 here can fail — connection refused, timeout, or a non-2xx response — and
-callers (app/routers/verification.py, app/routers/admin.py) are expected to
-catch MLServiceUnavailableError and fall back to the mock modules in
-app/modules/, so the demo never hard-depends on the heavy ML stack being up.
+callers (app/routers/verification.py, app/routers/admin.py) must catch
+MLServiceUnavailableError.
+
+What they do with it is deliberately NOT the same everywhere:
+  - Document analysis falls back to the mock modules for the WHOLE record and
+    labels it (analysis_source="mock", visible "Demo Data" banner), so a demo
+    without the heavy ML stack still runs end to end.
+  - The face step, once the document was analysed for real, FAILS CLOSED: no
+    match/liveness/watchlist result at all, flagged incomplete, risk floored.
+    It used to fall back to mock too, which put fabricated 94-97% "matches"
+    and passing liveness into records whose other fields were real — and did
+    so silently whenever the first face request outran the timeout.
 """
 import asyncio
 
 import httpx
 
-from app.config import ML_SERVICE_TIMEOUT_SECONDS, ML_SERVICE_URL
+from app.config import ML_SERVICE_FACE_TIMEOUT_SECONDS, ML_SERVICE_TIMEOUT_SECONDS, ML_SERVICE_URL
 
 
 class MLServiceUnavailableError(Exception):
@@ -27,11 +36,11 @@ _CONNECT_RETRY_ATTEMPTS = 3
 _CONNECT_RETRY_DELAY_SECONDS = 2.0
 
 
-async def _post_with_connect_retry(url: str, **kwargs) -> httpx.Response:
+async def _post_with_connect_retry(url: str, timeout: float | None = None, **kwargs) -> httpx.Response:
     last_exc: Exception | None = None
     for attempt in range(_CONNECT_RETRY_ATTEMPTS):
         try:
-            async with httpx.AsyncClient(timeout=ML_SERVICE_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(timeout=timeout or ML_SERVICE_TIMEOUT_SECONDS) as client:
                 resp = await client.post(url, **kwargs)
                 resp.raise_for_status()
                 return resp
@@ -53,8 +62,12 @@ async def _post_with_connect_retry(url: str, **kwargs) -> httpx.Response:
             message = f"{exc} — {detail}" if detail else str(exc)
             raise MLServiceUnavailableError(message) from exc
         except httpx.TimeoutException as exc:
-            raise MLServiceUnavailableError(str(exc)) from exc
-    raise MLServiceUnavailableError(str(last_exc))
+            # str(exc) is EMPTY for httpx timeouts, which left the stored
+            # reason blank and the failure undiagnosable.
+            raise MLServiceUnavailableError(
+                f"The ML service did not respond within {timeout or ML_SERVICE_TIMEOUT_SECONDS:.0f}s ({type(exc).__name__})."
+            ) from exc
+    raise MLServiceUnavailableError(f"Could not connect to the ML service ({type(last_exc).__name__}).")
 
 
 async def screen_document(
@@ -74,7 +87,9 @@ async def screen_document(
     if document_type_hint:
         data["document_type_hint"] = document_type_hint
 
-    resp = await _post_with_connect_retry(f"{ML_SERVICE_URL}/screen", files=files, data=data)
+    # A request carrying a live face runs the whole face pipeline too.
+    timeout = ML_SERVICE_FACE_TIMEOUT_SECONDS if live_bytes is not None else None
+    resp = await _post_with_connect_retry(f"{ML_SERVICE_URL}/screen", timeout=timeout, files=files, data=data)
     return resp.json()
 
 
@@ -83,7 +98,7 @@ async def embed_face(image_bytes: bytes, filename: str = "face.jpg") -> list[flo
     (a valid, expected outcome) — raises MLServiceUnavailableError only if
     the service itself couldn't be reached."""
     files = {"image": (filename, image_bytes, "application/octet-stream")}
-    resp = await _post_with_connect_retry(f"{ML_SERVICE_URL}/embed", files=files)
+    resp = await _post_with_connect_retry(f"{ML_SERVICE_URL}/embed", timeout=ML_SERVICE_FACE_TIMEOUT_SECONDS, files=files)
     return resp.json().get("embedding")
 
 

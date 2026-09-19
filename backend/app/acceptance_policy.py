@@ -14,20 +14,18 @@ so non-Indian nationalities are NOT covered here — evaluate_acceptance()
 returns applies=False for them, and callers must not treat that as either
 an acceptance or a rejection.
 
-Known, disclosed gaps (not implemented — see the brief's own caveats):
-  - "Families traveling together" (one approved-document adult covers
-    lesser-proof family members) requires linking multiple travelers to one
-    checkpoint session, which the current one-traveler-per-session data
-    model does not support. Implementing this needs a schema change
-    (a shared group/session id across multiple VerificationRecord rows)
-    beyond this pass's scope.
-  - "Only original, no photocopies or digital images" for passport/Voter ID
-    cannot be reliably determined from an uploaded/camera-captured image by
-    this system — every submission through this app *is* a digital image by
-    definition, so "is this a photocopy of the original vs. a photo of the
-    original itself" is not a distinction this pipeline can safely
-    automate. Left to the officer's physical inspection, as the brief's own
-    phrasing ("must carry... original") implies is required anyway.
+Two provisions of the brief are handled outside evaluate_acceptance():
+  - "Families traveling together": evaluate_family_provision() below, driven
+    by the group/relationship fields on VerificationRecord (see the
+    /api/verification/{id}/family endpoint). It only ever *upgrades* a
+    document that failed this policy, and only when every condition is met.
+  - "Only original, no photocopies or digital images": not decidable from an
+    image in general (every submission is a digital image), so it is not part
+    of this policy. What IS detectable is the physical signature of a
+    monochrome photocopy of a colour-issued document; that is raised as a
+    validation failure for the officer (see ml-service
+    reproduction_check.py and ORIGINAL_REQUIRED_DOC_TYPES in the verification
+    router), never as an automatic rejection.
 """
 from datetime import date, datetime
 
@@ -196,5 +194,57 @@ def evaluate_acceptance(nationality: str | None, doc_type: str | None, dob: date
         "reason": (
             f"'{doc_type}' is not a recognized accepted document type for Indian citizens at this crossing "
             f"(age bracket: {bracket})."
+        ),
+    }
+
+
+# "Families traveling together: if one adult carries an approved document
+# (passport/voter ID), other family members can travel with lesser proof of
+# identity plus proof of the family relationship." The brief does not enumerate
+# "lesser proof"; it is taken here as any recognised photo-ID from the age-
+# exempt list plus PAN and a school identity certificate, i.e. an identity
+# document that is real but not, on its own, accepted citizenship proof.
+FAMILY_LESSER_PROOF = AGE_EXEMPT_ACCEPTED | {"pan_card", "school_identity_certificate"}
+
+FAMILY_RELATIONSHIPS = {"spouse", "child", "parent", "sibling", "other_relative"}
+
+
+def evaluate_family_provision(
+    member_doc_type: str | None,
+    relationship: str | None,
+    relationship_proof_presented: bool,
+    anchor_name: str | None,
+    anchor_doc_type: str | None,
+) -> dict:
+    """Decides whether a member whose own document was NOT accepted may
+    travel under the family provision. Returns {"accepted": bool, "reason": str}.
+
+    Every condition of the provision is checked and named in the reason, so
+    an officer can see exactly which one is unmet rather than just "no"."""
+    anchor_key = (anchor_doc_type or "").strip().lower()
+    anchor_ok = anchor_key in STANDARD_ACCEPTED
+    doc_key = (member_doc_type or "").strip().lower().replace(" ", "_")
+    lesser_ok = doc_key in FAMILY_LESSER_PROOF
+    rel_ok = (relationship or "") in FAMILY_RELATIONSHIPS
+
+    missing = []
+    if not anchor_ok:
+        missing.append("no adult in the group carries an approved document (passport / original Voter ID / embassy certificate)")
+    if not lesser_ok:
+        missing.append(f"'{member_doc_type}' is not a recognised identity document for the family provision")
+    if not rel_ok:
+        missing.append("no family relationship was declared")
+    if not relationship_proof_presented:
+        missing.append("proof of the family relationship was not presented")
+
+    if missing:
+        return {"accepted": False, "reason": "Family provision not met: " + "; ".join(missing) + "."}
+
+    who = anchor_name or "the group's adult"
+    return {
+        "accepted": True,
+        "reason": (
+            f"Accepted under the family provision: {relationship.replace('_', ' ')} of {who}, "
+            f"who carries an approved document ({anchor_key.replace('_', ' ')}), with proof of relationship presented."
         ),
     }

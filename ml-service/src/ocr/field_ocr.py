@@ -106,40 +106,58 @@ def _upscale_for_ocr(image: np.ndarray) -> np.ndarray:
     return cv2.resize(image, (int(w * factor), int(h * factor)), interpolation=cv2.INTER_CUBIC)
 
 
-def ocr_full_document(image: np.ndarray, languages: tuple[str, ...] = ("en", "hi")) -> list[OCRLine]:
-    """Runs PaddleOCR over the WHOLE document image and returns every text
-    line it detects, in reading order (top-to-bottom, then left-to-right).
+def _enhance_clahe(image: np.ndarray) -> np.ndarray:
+    """Local contrast + mild sharpening — the fix for washed-out and slightly
+    soft photos, where the recognizer's problem is faint strokes, not noise."""
+    import cv2
 
-    This is the preferred path for non-MRZ documents, replacing the older
-    per-crop approach (`ocr_field_crop` below, kept for callers that
-    already have a tight crop). Reason: PaddleOCR ships its own trained
-    text *detector*, which locates text lines far more accurately than
-    this build's heuristic contour/morphology zone-finder in
-    src/preprocessing/region_segmentation.py. Feeding that heuristic's
-    crops to PaddleOCR threw away the good detector and kept the crude
-    one, which is what produced characters sliced mid-glyph.
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    l = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(l)
+    boosted = cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+    blurred = cv2.GaussianBlur(boosted, (0, 0), 1.6)
+    return cv2.addWeighted(boosted, 1.6, blurred, -0.6, 0)
 
-    Returns [] (never raises) if PaddleOCR is unavailable or nothing is
-    detected — an empty result is a valid outcome, not an error.
-    """
-    try:
-        import paddleocr  # noqa: F401
-    except ImportError:
-        logger.warning("paddleocr is not installed; full-document OCR unavailable in this environment.")
-        return []
 
-    prepared = _upscale_for_ocr(image)
+def _enhance_denoise(image: np.ndarray) -> np.ndarray:
+    """Denoise first, then contrast — for sensor-noise / heavy-JPEG photos,
+    where sharpening alone would amplify the noise into false strokes."""
+    import cv2
 
+    return _enhance_clahe(cv2.fastNlMeansDenoisingColored(image, None, 7, 7, 7, 21))
+
+
+def _enhance_binarize(image: np.ndarray) -> np.ndarray:
+    """Adaptive threshold — for uneven lighting, shadows and photocopy-grey
+    backgrounds, where a single global brightness makes text vanish."""
+    import cv2
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 12)
+    return cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+
+
+# Tried in order, cheapest-to-most-aggressive. "base" is always first.
+_VARIANTS: tuple[tuple[str, object], ...] = (
+    ("base", lambda img: img),
+    ("clahe", _enhance_clahe),
+    ("denoise", _enhance_denoise),
+    ("binarize", _enhance_binarize),
+)
+
+
+def _ocr_pass(image: np.ndarray, languages: tuple[str, ...]) -> tuple[list[OCRLine], str | None]:
+    """One PaddleOCR pass per language over `image`; returns the language
+    pass that read the most text confidently, and which language that was."""
     best_lines: list[OCRLine] = []
-    best_mean_confidence = -1.0
+    best_score = -1.0
+    best_lang = None
     for lang in languages:
         try:
-            engine = _get_engine(lang)
-            result = engine.ocr(prepared, cls=True)
+            result = _get_engine(lang).ocr(image, cls=True)
         except Exception as exc:
-            logger.warning("PaddleOCR full-document pass failed for lang=%s: %s", lang, exc)
+            logger.warning("PaddleOCR pass failed for lang=%s: %s", lang, exc)
             continue
-
         if not result or not result[0]:
             continue
 
@@ -157,19 +175,126 @@ def ocr_full_document(image: np.ndarray, languages: tuple[str, ...] = ("en", "hi
                 x_left=float(min(xs)),
                 height=float(max(ys) - min(ys)),
             ))
-
         if not lines:
             continue
 
-        mean_confidence = float(np.mean([line.confidence for line in lines]))
-        # Prefer the language pass that read the most text confidently —
-        # a pass that finds 12 lines at 0.9 beats one finding 2 at 0.95.
-        score = mean_confidence * min(len(lines), 20)
-        if score > best_mean_confidence:
-            best_mean_confidence = score
-            best_lines = lines
+        # A pass that finds 12 lines at 0.9 beats one finding 2 at 0.95.
+        score = float(np.mean([l.confidence for l in lines])) * min(len(lines), 20)
+        if score > best_score:
+            best_score, best_lines, best_lang = score, lines, lang
+    return best_lines, best_lang
 
-    return _group_into_lines(best_lines)
+
+def ocr_document_candidates(
+    image: np.ndarray,
+    languages: tuple[str, ...] = ("en", "hi"),
+    good_enough=None,
+) -> list[tuple[str, list[OCRLine]]]:
+    """Every enhancement variant's OCR read, as [(variant_name, lines)].
+
+    Callers vote across these rather than trusting any single one: on a
+    poor photo each enhancement fixes some characters and breaks others, and
+    which is which is unknowable per-image — but a value that several
+    independently processed reads agree on is far more likely correct than
+    one that appeared once. `good_enough(lines)` stops early after a variant
+    that already reads cleanly, so a clean photo still pays for one pass.
+    """
+    try:
+        import paddleocr  # noqa: F401
+    except ImportError:
+        logger.warning("paddleocr is not installed; full-document OCR unavailable in this environment.")
+        return []
+
+    prepared = _upscale_for_ocr(image)
+    candidates: list[tuple[str, list[OCRLine]]] = []
+    winning_lang: str | None = None
+
+    for name, transform in _VARIANTS:
+        try:
+            variant_image = transform(prepared)
+        except Exception as exc:
+            logger.warning("OCR enhancement %r failed, skipping it: %s", name, exc)
+            continue
+
+        langs = languages if winning_lang is None else (winning_lang,)
+        raw_lines, lang = _ocr_pass(variant_image, langs)
+        if not raw_lines:
+            continue
+        if winning_lang is None:
+            winning_lang = lang
+
+        grouped = _group_into_lines(raw_lines)
+        candidates.append((name, grouped))
+        if good_enough is not None and good_enough(grouped):
+            break
+
+    return candidates
+
+
+def ocr_full_document(
+    image: np.ndarray,
+    languages: tuple[str, ...] = ("en", "hi"),
+    score_fn=None,
+    good_enough=None,
+) -> list[OCRLine]:
+    """Runs PaddleOCR over the WHOLE document image and returns every text
+    line it detects, in reading order.
+
+    Poor-quality photos are handled by trying progressively more aggressive
+    image enhancements (contrast/sharpen, denoise, adaptive threshold) and
+    keeping whichever variant reads best — rather than one fixed pipeline
+    that is wrong for half the ways a photo can be bad. The choice is
+    driven by `score_fn(lines)` (the caller knows what "reads well" means:
+    pipeline.py scores by how many real fields the lines yield, not just by
+    OCR confidence, which is high even on confidently-wrong text).
+    `good_enough(lines)` lets the caller stop early: a clean photo pays for
+    exactly one pass, and only a poor one pays for the rest.
+
+    PaddleOCR brings its own trained text detector, which locates lines far
+    more accurately than the heuristic zone-finder in
+    src/preprocessing/region_segmentation.py — hence whole-page, not crops.
+
+    Returns [] (never raises) if PaddleOCR is unavailable or nothing is
+    detected — an empty result is a valid outcome, not an error.
+    """
+    try:
+        import paddleocr  # noqa: F401
+    except ImportError:
+        logger.warning("paddleocr is not installed; full-document OCR unavailable in this environment.")
+        return []
+
+    score_fn = score_fn or (lambda lines: float(np.mean([l.confidence for l in lines])) * min(len(lines), 20))
+
+    prepared = _upscale_for_ocr(image)
+    best_lines: list[OCRLine] = []
+    best_score = float("-inf")
+    winning_lang: str | None = None
+
+    for name, transform in _VARIANTS:
+        try:
+            variant_image = transform(prepared)
+        except Exception as exc:
+            logger.warning("OCR enhancement %r failed, skipping it: %s", name, exc)
+            continue
+
+        # After the first pass, only the language that already won is worth
+        # re-running — the others cost a full pass each for no new signal.
+        langs = languages if winning_lang is None else (winning_lang,)
+        raw_lines, lang = _ocr_pass(variant_image, langs)
+        if not raw_lines:
+            continue
+        if winning_lang is None:
+            winning_lang = lang
+
+        grouped = _group_into_lines(raw_lines)
+        score = score_fn(grouped)
+        logger.info("OCR variant=%s lines=%d score=%.2f", name, len(grouped), score)
+        if score > best_score:
+            best_score, best_lines = score, grouped
+        if good_enough is not None and good_enough(grouped):
+            break
+
+    return best_lines
 
 
 def ocr_field_crop(crop: np.ndarray, languages: tuple[str, ...] = ("en", "hi")) -> FieldOCRResult:

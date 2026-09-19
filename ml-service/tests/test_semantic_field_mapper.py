@@ -131,3 +131,53 @@ def test_devanagari_digits_make_a_number_unreadable_rather_than_wrong():
     on an audit record is worse than an absent one."""
     result = extract_semantic_fields(_fields(*REAL_MESSY_OCR_LINES))
     assert "document_number" not in result
+
+
+def test_real_names_resembling_label_words_are_not_rejected():
+    """The label-similarity filter exists to drop garbled "Mobile"/"Aadhaar"
+    misreads; it must not drop genuine names that merely look similar."""
+    for name in ("Indira Kumari", "Aadhya Sharma", "Mobina Khatun", "Malay Kumar"):
+        assert extract_semantic_fields(_fields(name))["name"].value == name
+
+
+def test_garbled_label_is_not_taken_as_a_name():
+    """"Moblle No" is a misread of the "Mobile No" label; it looked exactly
+    like a two-word name and was being returned as one."""
+    assert "name" not in extract_semantic_fields(_fields("Moblle No"))
+
+
+def test_ocr_artefact_on_a_long_name_token_does_not_discard_it():
+    result = extract_semantic_fields(_fields("Darshan Niravbha! Buddhde"))
+    assert result["name"].value.startswith("Darshan Niravbha")
+
+
+def test_o_and_l_inside_a_digit_run_are_read_as_zero_and_one():
+    result = extract_semantic_fields(_fields("DOB: O1/l2/2006"))
+    assert result["date_of_birth"].value == "01/12/2006"
+
+
+def test_aadhaar_check_digit_accepts_a_valid_number():
+    from src.ocr.semantic_field_mapper import aadhaar_checksum_valid
+    assert aadhaar_checksum_valid("826972769502")
+
+
+def test_aadhaar_check_digit_catches_single_digit_misread_and_transposition():
+    from src.ocr.semantic_field_mapper import aadhaar_checksum_valid
+    assert not aadhaar_checksum_valid("826972769503")  # one digit misread
+    assert not aadhaar_checksum_valid("826972769520")  # adjacent transposition
+    assert not aadhaar_checksum_valid("82697276950")    # wrong length
+
+
+def test_a_misread_aadhaar_number_is_dropped_not_stored():
+    result = extract_semantic_fields(_fields("8269 7276 9503"))  # last digit misread
+    assert "document_number" not in result
+
+
+def test_pan_number_is_extracted():
+    result = extract_semantic_fields(_fields("INCOME TAX DEPARTMENT", "ABCDE1234F", "RAMESH KUMAR"))
+    assert result["document_number"].value == "ABCDE1234F"
+
+
+def test_driving_licence_number_is_extracted_without_separators():
+    result = extract_semantic_fields(_fields("Driving Licence", "DL No: MH12 20110012345"))
+    assert result["document_number"].value == "MH1220110012345"
