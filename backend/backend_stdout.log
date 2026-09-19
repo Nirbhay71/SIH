@@ -1,1 +1,14 @@
 INFO:     127.0.0.1:49229 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49237 - "POST /api/verification/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49239 - "POST /api/verification/6b2960ab-b075-4f11-9d9d-481350e9a493/document HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49242 - "POST /api/verification/6b2960ab-b075-4f11-9d9d-481350e9a493/face HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49249 - "GET /api/verification/6b2960ab-b075-4f11-9d9d-481350e9a493/result HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49251 - "GET /api/audit/verify-chain HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49716 - "POST /api/verification/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64389 - "POST /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/document HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62773 - "POST /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/face HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62946 - "GET /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/result HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60936 - "GET /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/result HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55356 - "GET /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/family HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56564 - "GET /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/document-image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63535 - "GET /api/verification/31516e18-d66d-4ed9-a847-d645c04e7013/family HTTP/1.1" 200 OK
